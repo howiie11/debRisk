@@ -1,4 +1,4 @@
-CFLAGS = -Wall -g -DINLINE
+CFLAGS = -g -w -DINLINE
 MFLAGS = -lm
 #CC = gcc $(CFLAGS)
 CC = g++ -fpermissive $(CFLAGS)
