@@ -400,31 +400,36 @@ int MSIS90E(int day,double sec,
   return 0;
 }
 
+#define FLAGS_ALL {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
 int NRLMSISE(int day,double sec,
 	     double alt,double glat,double glon,
 	     double KAP[],
 	     double *rho,double *T)
 {
+  struct nrlmsise_output output;
+  struct nrlmsise_input input;
+  struct nrlmsise_flags flags;
+  struct ap_array aph;
 
-  int IYD=day;
-  real SEC=(real)sec;
-  real ALT=(real)alt;
-  real GLAT=(real)glat;
-  real GLONG=(real)glon;
-  real STL=sec/3600.0+GLONG/15.0;
-  real F107A=KAP[0];
-  real F107=KAP[1];
-  int MASS=48;
-  real* AP=newVectorf(7);
   int k=0,j=2;
-  AP[k++]=KAP[j++];AP[k++]=KAP[j++];AP[k++]=KAP[j++];
-  AP[k++]=KAP[j++];AP[k++]=KAP[j++];AP[k++]=KAP[j++];
-  AP[k++]=KAP[j++];
-  real* D=newVectorf(8);
-  real* Ts=newVectorf(2);
-  gtd6_(&IYD,&SEC,&ALT,&GLAT,&GLONG,&STL,&F107A,&F107,AP,&MASS,D,Ts);
-  *rho=(double)D[5]*1e3;
-  *T=(double)Ts[1];
+  aph.a[k++]=KAP[j++];aph.a[k++]=KAP[j++];aph.a[k++]=KAP[j++];
+  aph.a[k++]=KAP[j++];aph.a[k++]=KAP[j++];aph.a[k++]=KAP[j++];
+  aph.a[k++]=KAP[j++];
+  flags.switches[]=FLAGS_ALL;
+
+  input.doy=day;
+  input.year=0; /* without effect */
+  input.sec=sec;
+  input.alt=alt;
+  input.g_lat=glat;
+  input.g_long=glon;
+  input.lst=sec/3600.0+GLONG/15.0;
+  input.f107A=KAP[0];
+  input.f107=KAP[1];
+  input.ap=40.0;
+
+  gtd7(&input,&flags,&output);  
+  
   return 0;
 }
 
