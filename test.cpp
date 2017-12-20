@@ -13,13 +13,12 @@ int main(int argc,char* argv[])
   int iyd=00001;
   double sec=0.0,alt=1.4,lat=-36.2,lon=-75.34;
 
+  /*Day of year*/xo=1.0;xe=365.0;qx=1;
   /*Time of day*/xo=0.0;xe=86400;qx=2;
   /*Altitude*/xo=0.0;xe=100.0;qx=3;
   /*Latitude*/xo=0.0;xe=90.0;qx=4;
+
   /*Longitude*/xo=0.0;xe=180.0;qx=5;
-
-  /*Day of year*/xo=1.0;xe=365.0;qx=1;
-
   for(i=0;i<n;i++){
     x=xo+i*(xe-xo)/n;
     iyd=qx==1?(int)x:iyd;
@@ -27,7 +26,7 @@ int main(int argc,char* argv[])
     alt=qx==3?x:alt;
     lat=qx==4?x:lat;
     lon=qx==5?x:lon;
-    MSIS90E(iyd,sec,alt,lat,lon,KAP,&rho,&T);
+    NRLMSISE(iyd,sec,alt,lat,lon,KAP,&rho,&T);
     fprintf(f,"%.17e %.17e %.17e\n",x,rho,T);
   }
   fclose(f);
