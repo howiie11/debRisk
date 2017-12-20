@@ -7,6 +7,11 @@
 #include <string.h>
 
 ////////////////////////////////////////////////////////////////////////
+//ADDITIONAL LIBRARIES
+////////////////////////////////////////////////////////////////////////
+#include <nrlmsise-00.h>
+
+////////////////////////////////////////////////////////////////////////
 //BASIC MACROS
 ////////////////////////////////////////////////////////////////////////
 #define EXTMET 1
@@ -394,6 +399,35 @@ int MSIS90E(int day,double sec,
   *T=(double)Ts[1];
   return 0;
 }
+
+int NRLMSISE(int day,double sec,
+	     double alt,double glat,double glon,
+	     double KAP[],
+	     double *rho,double *T)
+{
+
+  int IYD=day;
+  real SEC=(real)sec;
+  real ALT=(real)alt;
+  real GLAT=(real)glat;
+  real GLONG=(real)glon;
+  real STL=sec/3600.0+GLONG/15.0;
+  real F107A=KAP[0];
+  real F107=KAP[1];
+  int MASS=48;
+  real* AP=newVectorf(7);
+  int k=0,j=2;
+  AP[k++]=KAP[j++];AP[k++]=KAP[j++];AP[k++]=KAP[j++];
+  AP[k++]=KAP[j++];AP[k++]=KAP[j++];AP[k++]=KAP[j++];
+  AP[k++]=KAP[j++];
+  real* D=newVectorf(8);
+  real* Ts=newVectorf(2);
+  gtd6_(&IYD,&SEC,&ALT,&GLAT,&GLONG,&STL,&F107A,&F107,AP,&MASS,D,Ts);
+  *rho=(double)D[5]*1e3;
+  *T=(double)Ts[1];
+  return 0;
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 //OTHER ROUTINES
