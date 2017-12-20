@@ -324,6 +324,9 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
 /*
   Source: ftp://ftp.irf.se/pub/perm/ESRAD/SPECTRUM/gtd6.f (JGR, 96, 1159-1172, 1991)
  */
+extern "C" void gtd6_(int* IYD,float* SEC,float* ALT,float* GLAT,float* GLONG,
+		     float* STL,float* F107A,float* F107,float AP[],int* MASS,
+		     float D[],float T[]);
 
 
 ////////////////////////////////////////////////////////////////////////
