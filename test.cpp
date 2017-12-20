@@ -11,14 +11,16 @@ int main(int argc,char* argv[])
   FILE* f=fopen("atmosphere.dat","w");
 
   int iyd=00001;
-  double sec=0.0,alt=1.4,lat=-36.2,lon=-75.34;
+  double sec=0.0,alt=1.4,lat=+36.2,lon=-75.34;
 
-  /*Day of year*/xo=1.0;xe=365.0;qx=1;
-  /*Time of day*/xo=0.0;xe=86400;qx=2;
   /*Altitude*/xo=0.0;xe=100.0;qx=3;
   /*Latitude*/xo=0.0;xe=90.0;qx=4;
-
   /*Longitude*/xo=0.0;xe=180.0;qx=5;
+  /*Day of year*/xo=1.0;xe=120.0;qx=1;
+
+  /*Second of the day*/xo=0.0;xe=86400;qx=2;
+  fprintf(f,"%-25s %-25s %-25s %-25s %-25s\n",
+	  "#1:x","2:rho(90)","3:T(90)","4:rho(00)","5:T(00)");
   for(i=0;i<n;i++){
     x=xo+i*(xe-xo)/n;
     iyd=qx==1?(int)x:iyd;
@@ -26,8 +28,13 @@ int main(int argc,char* argv[])
     alt=qx==3?x:alt;
     lat=qx==4?x:lat;
     lon=qx==5?x:lon;
+    //printf("Variable : %e\n",x);
+    fprintf(f,"%-25.17e ",x);
+    MSIS90E(iyd,sec,alt,lat,lon,KAP,&rho,&T);
+    fprintf(f,"%-25.17e %-25.17e ",rho,T);
     NRLMSISE(iyd,sec,alt,lat,lon,KAP,&rho,&T);
-    fprintf(f,"%.17e %.17e %.17e\n",x,rho,T);
+    fprintf(f,"%-25.17e %-25.17e ",rho,T);
+    fprintf(f,"\n");
   }
   fclose(f);
   //*/

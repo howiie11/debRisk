@@ -323,6 +323,85 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
 ////////////////////////////////////////////////////////////////////////
 //ATMOSPHERIC MODEL NRLMSISE
 ////////////////////////////////////////////////////////////////////////
+typedef float real;
+real *newVectorf(int n)
+{
+  real *v;
+  v=(real*)malloc(n*sizeof(real));
+  return v;
+}
+extern "C" void gtd6_(int* IYD,real* SEC,real* ALT,real* GLAT,real* GLONG,
+		      real* STL,real* F107A,real* F107,real AP[],int* MASS,
+		      real D[],real T[]);
+/*
+       IYD - YEAR AND DAY AS YYDDD or DDD (day of year from 1 to 365)
+       SEC - UT(SEC)
+       ALT - ALTITUDE(KM)
+       GLAT - GEODETIC LATITUDE(DEG)
+       GLONG - GEODETIC LONGITUDE(DEG)
+       STL - LOCAL APPARENT SOLAR TIME(HRS)
+       AP - MAGNETIC INDEX(DAILY) OR WHEN SW(9)=-1. :
+          - ARRAY CONTAINING:
+	    (1) F107A - 3 MONTH AVERAGE OF F10.7 FLUX
+	    (2) F107 - DAILY F10.7 FLUX FOR PREVIOUS DAY
+            (3) DAILY AP
+            (4) 3 HR AP INDEX FOR CURRENT TIME
+            (5) 3 HR AP INDEX FOR 3 HRS BEFORE CURRENT TIME
+            (6) 3 HR AP INDEX FOR 6 HRS BEFORE CURRENT TIME
+            (7) 3 HR AP INDEX FOR 9 HRS BEFORE CURRENT TIME
+            (8) AVERAGE OF EIGHT 3 HR AP INDICIES FROM 12 TO 33 HRS PRIOR
+                TO CURRENT TIME
+            (9) AVERAGE OF EIGHT 3 HR AP INDICIES FROM 36 TO 59 HRS PRIOR
+                TO CURRENT TIME
+       MASS - MASS NUMBER (ONLY DENSITY FOR SELECTED GAS IS
+                CALCULATED.  MASS 0 IS TEMPERATURE.  MASS 48 FOR ALL.
+
+    Note:  Ut, Local Time, and Longitude are used independently in the
+           model and are not of equal importance for every situation.  
+           For the most physically realistic calculation these three
+           variables should be consistent (STL=SEC/3600+GLONG/15).
+           F107, F107A, and AP effects are not large below 80 km 
+           and these can be set to 150., 150., and 4. respectively.
+
+    OUTPUT:
+       D(1) - HE NUMBER DENSITY(CM-3)
+       D(2) - O NUMBER DENSITY(CM-3)
+       D(3) - N2 NUMBER DENSITY(CM-3)
+       D(4) - O2 NUMBER DENSITY(CM-3)
+       D(5) - AR NUMBER DENSITY(CM-3)                       
+       D(6) - TOTAL MASS DENSITY(GM/CM3)
+       D(7) - H NUMBER DENSITY(CM-3)
+       D(8) - N NUMBER DENSITY(CM-3)
+       T(1) - EXOSPHERIC TEMPERATURE
+       T(2) - TEMPERATURE AT ALT
+ */
+int MSIS90E(int day,double sec,
+	    double alt,double glat,double glon,
+	    double KAP[],
+	    double *rho,double *T)
+{
+  int IYD=day;
+  real SEC=(real)sec;
+  real ALT=(real)alt;
+  real GLAT=(real)glat;
+  real GLONG=(real)glon;
+  real STL=sec/3600.0+GLONG/15.0;
+  real F107A=KAP[0];
+  real F107=KAP[1];
+  int MASS=48;
+  real* AP=newVectorf(7);
+  int k=0,j=2;
+  AP[k++]=KAP[j++];AP[k++]=KAP[j++];AP[k++]=KAP[j++];
+  AP[k++]=KAP[j++];AP[k++]=KAP[j++];AP[k++]=KAP[j++];
+  AP[k++]=KAP[j++];
+  real* D=newVectorf(8);
+  real* Ts=newVectorf(2);
+  gtd6_(&IYD,&SEC,&ALT,&GLAT,&GLONG,&STL,&F107A,&F107,AP,&MASS,D,Ts);
+  *rho=(double)D[5]*1e3;
+  *T=(double)Ts[1];
+  return 0;
+}
+
 /*
   Sources:
     https://www.brodo.de/space/nrlmsise/
@@ -443,7 +522,7 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
   
  */
 #define KAP_REF {150,22,22,22,22,22,22,22}
-#define FLAGS_ALL {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
+#define FLAGS_ALL {1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
 int NRLMSISE(int day,double sec,
 	     double alt,double glat,double glon,
 	     double KAP[],
