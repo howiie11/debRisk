@@ -57,6 +57,15 @@ double *newVector(int n)
   return v;
 }
 
+float *newVectorf(int n)
+{
+  float *v;
+  
+  v=(float*)malloc(n*sizeof(float));
+  
+  return v;
+}
+
 double **newMatrix(int n,int m)
 {
   double **M;
@@ -308,6 +317,14 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
   }
   return 0;
 }
+
+////////////////////////////////////////////////////////////////////////
+//ATMOSPHERIC MODEL MSIS90E
+////////////////////////////////////////////////////////////////////////
+/*
+  Source: ftp://ftp.irf.se/pub/perm/ESRAD/SPECTRUM/gtd6.f (JGR, 96, 1159-1172, 1991)
+ */
+
 
 ////////////////////////////////////////////////////////////////////////
 //OTHER ROUTINES

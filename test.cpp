@@ -1,8 +1,43 @@
 #include <propagator.hpp>
 using namespace std;
 
+//ftp://ftp.irf.se/pub/perm/ESRAD/SPECTRUM/gtd6.
+extern "C" void gtd6_(int* IYD,float* SEC,float* ALT,float* GLAT,float* GLONG,
+		     float* STL,float* F107A,float* F107,float AP[],int* MASS,
+		     float D[],float T[]);
+
 int main(int argc,char* argv[])
 {
+  //*MSIS90E ATMOSPHERE MODEL
+  int IYD=90001;
+  float SEC2=10.0;
+  float SEC=10.0;
+  float ALT=1.4;
+  float GLAT=6.2;
+  float GLONG=-75.34;
+  float STL=12.0;
+  float F107A=150.0;
+  float F107=150.0;
+  int MASS=48;
+  float* AP=newVectorf(7);
+  int k=0;
+  AP[k++]=22.0;
+  AP[k++]=22.0;
+  AP[k++]=22.0;
+  AP[k++]=22.0;
+  AP[k++]=22.0;
+  AP[k++]=22.0;
+  AP[k++]=22.0;
+  float* D=newVectorf(8);
+  float* T=newVectorf(2);
+
+  //test_(&IYD,&SEC2);
+  gtd6_(&IYD,&SEC,&ALT,&GLAT,&GLONG,&STL,&F107A,&F107,AP,&MASS,D,T);
+  fprintf(stdout,"Density = %e %e %e %e %e %e %e %e\n",D[0],D[1],D[2],D[3],D[4],D[5],D[6],D[7]);
+  fprintf(stdout,"Temperature = %e %e\n",T[0],T[1]);
+  
+  //*/
+
   //TEST OF MAS
   /*
   double tini=0.0;
@@ -29,7 +64,7 @@ int main(int argc,char* argv[])
   //*/
 
   //TEST OF TWO BODY PROBLEM
-  //*
+  /*
   double RE=6.371e6;//m
   double ME=5.98e24;//kg
   double H=300e3;//m

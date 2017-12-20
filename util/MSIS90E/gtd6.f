@@ -102,6 +102,11 @@ C      Put identification data into common/datime/
     2 CONTINUE
 C
 Ce        Test for changed input
+C      WRITE(*,*) AP(0)
+C      WRITE(*,*) IYD,SEC,ALT,GLAT,GLONG,STL,F107A,F107,AP,MASS,D,T
+C      WRITE(*,*) IYD,MASS,SEC,ALT,GLAT,GLONG,STL,F107A,F107
+C      WRITE(*,*) IYD,MASS,SEC
+
       V1=VTST(IYD,SEC,GLAT,GLONG,STL,F107A,F107,AP,1)
 C       Latitude variation of gravity (none for SW(2)=0)
       XLAT=GLAT
@@ -211,7 +216,7 @@ C
    10 CONTINUE
       GOTO 90
    50 CONTINUE
-      DD=DENSM(ALT,1.,0,TZ,MN3,ZN3,TN3,TGN3,MN2,ZN2,TN2,TGN2)                
+      DD=DENSM(ALT,1.,0.0,TZ,MN3,ZN3,TN3,TGN3,MN2,ZN2,TN2,TGN2)                
       T(2)=TZ
    90 CONTINUE
       ALAST=ALT
@@ -1447,6 +1452,7 @@ C          MSISE 90 12-MAR-90
       COMMON/MAVG6/PAVGM(10)
       COMMON/DATIM6/ISDATE(3),ISTIME(2),NAME(2)
       COMMON/METSEL/IMR
+      CHARACTER*4 :: ISDATE,ISTIME,NAME
       DATA IMR/0/
       DATA ISDATE/'12-M','AR-9','0   '/,ISTIME/'15:0','9:04'/
       DATA NAME/'MSIS','E 90'/
