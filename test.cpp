@@ -40,18 +40,32 @@ int main(int argc,char* argv[])
     double vcirc=sqrt(GCONST*ME/ro);//m/s
 
     //INITIAL CONDITION IN CARTESIAN COORDINATES
-    double y[6];
+    double X0[6];
 
-    double yc[]={+ro/ul,0.0,0.0,0.0,+vcirc/uv,0.0};
-    fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(yc,6,"%f "));
+    double Xc0[]={+ro/ul,0.0,0.0,0.0,+vcirc/uv,0.0};
+    fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(Xc0,6,"%f "));
 
-    cart2sph(y,yc);
-    fprintf(stdout,"Initial conditions (spherical): %s\n",vec2strn(y,6,"%f "));
+    cart2sph(X0,Xc0);
+    fprintf(stdout,"Initial conditions (spherical): %s\n",vec2strn(X0,6,"%f "));
 
     double dydt[6];
     double params[]={6.0,1.0};
 
-    EoM_Full(0,y,dydt,params);
+    //Value of the equation
+    EoM_Full(0,X0,dydt,params);
+
+    //Integration
+    double tini=0.0;
+    double h=0.1;
+    int npoints=100;
+    double duration=90*60.0/ut;
+    int nsys=6;
+    double params[]={nsys,1.0};
+    double *ts=newVector(npoints);
+    double **X=newMatrix(npoints,nsys);
+    integrateEoM(tini,y,h,npoints,duration,nsys,EoM_Full,params,
+		 ts,X);
+    
   }
 
  atmos:

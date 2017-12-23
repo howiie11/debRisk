@@ -122,6 +122,18 @@ char* vec2strn(double vec[],int n,char frm[]="%.8e ")
 }
 
 /*
+  Save matriz into file
+ */
+int savetxt(char* fname,double** x,int n,int m,double* zcol=NULL)
+{
+    //SAVE OUTPUT
+    FILE* f=fopen(fname,"w");
+    for(int i=n;i-->0;)
+      fprintf(f,"%s\n",vec2strn(x[i],m,"%.17e "));
+    return 0;
+}
+
+/*
   Transform vector state from cartesian to spherical
 
   c: x,y,z,vx,vy,vz
