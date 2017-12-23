@@ -10,6 +10,8 @@
 //ADDITIONAL LIBRARIES
 ////////////////////////////////////////////////////////////////////////
 #include <nrlmsise-00.h>
+#include <SpiceUsr.h>
+#include <eph_manager.h>
 
 ////////////////////////////////////////////////////////////////////////
 //BASIC MACROS
@@ -76,6 +78,86 @@ double **newMatrix(int n,int m)
   for(int i=0;i<n;i++) M[i]=(double*)malloc(m*sizeof(double));
   
   return M;
+}
+
+char* dec2sex(double dec)
+{
+  double d,m,s;
+  int id,im,sgn;
+  char *str=(char*)calloc(sizeof(char),100); 
+  d=fabs(dec);
+  sgn=dec/d;
+  id=floor(d);
+  m=(d-id)*60;
+  im=floor(m);
+  s=(m-im)*60;
+  sprintf(str,"%+d:%02d:%.3f",sgn*id,im,s);
+  return str;
+}
+
+double sex2dec(double d,double m,double s)
+{
+  double s2d;
+  s2d=d+m/60.0+s/3600.0;
+  return s2d;
+}
+
+char* vec2str(double vec[],char frm[]="%.8e ")
+{
+  char format[100];
+  char *str=(char*)calloc(sizeof(char),100); 
+  sprintf(format,"%s %s %s",frm,frm,frm);
+  sprintf(str,format,vec[0],vec[1],vec[2]);
+  return str;
+}
+
+char* vec2strn(double vec[],int n,char frm[]="%.8e ")
+{
+  int i;
+  char format[100];
+  char *str=(char*)calloc(sizeof(char),100*n);
+  sprintf(format,"%ss%s","%",frm);
+  for(i=0;i<n;i++) sprintf(str,format,str,vec[i]);
+  return str;
+}
+
+/*
+  Transform vector state from cartesian to spherical
+
+  c: x,y,z,vx,vy,vz
+  s: r,f(respect to plane xy),q(azimutal),vr,vq,vf
+
+  In spice longitude = q, latitude = f
+
+  See: http://www.astrosurf.com/jephem/library/li110spherCart_en.htm
+ */
+int cart2sph(double s[6],double c[6])
+{
+  //Convert cartesian coordinates to spherical
+  reclat_c(c,&s[0],&s[2],&s[1]);
+
+  //Convert velocity
+  double rho2=c[0]*c[0]+c[1]*c[1];
+
+  /*r.v*/double rv=vdot_c(c,c+3);
+  /*dr*/s[3]=rv/s[0];
+  /*df*/s[4]=-(c[2]*(rv-c[2]*c[5])-rho2*c[5])/(s[0]*s[0]*sqrt(rho2));
+  /*dq*/s[5]=-(c[3]*c[1]-c[0]*c[4])/rho2;
+
+  return 0;
+}
+
+int sph2cart(double c[6],double s[6])
+{
+  latrec_c(s[0],s[2],s[1],c);
+  double rho=sqrt(c[0]*c[0]+c[1]*c[1]);
+
+  //Convert velocity
+  /*Vx*/c[3]=c[0]/s[0]*s[3]+c[1]*s[5]+c[2]*c[0]/rho*s[4];
+  /*Vy*/c[4]=c[1]/s[0]*s[3]-c[0]*s[5]+c[2]*c[1]/rho*s[4];
+  /*Vz*/c[5]=c[2]/s[0]*s[3]-rho*s[4];
+
+  return 0;
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -624,3 +706,125 @@ int EoM_2B(double t,double y[],double dydt[],void *params)
   return 0;
 }
 
+/*
+  Geopotential
+
+  Parameteres:
+     1: mu: Gravitational parameter of the central planet (GM)
+*/
+int geoPotential(double et,double r,double q,double f,double *phi,void *params)
+{
+  double *ps=(double*)params;
+  double mu=ps[1];
+
+  *phi=-mu/r;
+  
+  return 0;
+}
+/*
+  Gradient of geopotential in spherical coordinates
+
+  Parameteres:
+     1: mu: Gravitational parameter of the central planet (GM)
+ */
+int gradGeoPotential(double et,double r,double f,double q,double dphidy[],void *params)
+{
+  double *ps=(double*)params;
+  double mu=ps[1];
+
+  /*dphi/dr*/dphidy[0]=-mu/(r*r);
+  /*dphi/df*/dphidy[1]=0;
+  /*dphi/dq*/dphidy[2]=0;
+
+  return 0;
+}
+
+/*
+  Tidal effects
+
+  Parameteres:
+     1: mu: Gravitational parameter of the central planet (GM)
+ */
+int tidalForce(double et,double r,double f,double q,double Ftid[],void *params)
+{
+  double *ps=(double*)params;
+  
+  return 0;
+}
+
+/*
+  Atmospheric friction
+
+  Parameteres:
+     1: mu: Gravitational parameter of the central planet (GM)
+ */
+int atmosDrag(double et,double r,double q,double f,double Ftid[],void *params)
+{
+  double *ps=(double*)params;
+  
+  return 0;
+}
+
+/*
+  Solar pressure
+
+  Parameteres:
+     1: mu: Gravitational parameter of the central planet (GM)
+ */
+int solarPressure(double r,double q,double f,double Ftid[],void *params)
+{
+  double *ps=(double*)params;
+  
+  return 0;
+}
+
+/*
+  Satellite equations in spherical coordinates
+  
+  Coordinates:
+  y0: r
+  y1: theta (q)
+  y2: phi (f)
+  
+  Parameters:
+
+     1: mu: Gravitational parameter of the central planet (GM)
+
+ */
+int EoM_Full(double t,double y[],double dydt[],void *params) 
+{ 
+  double *ps=(double*)params;
+  int nsys=(int)ps[0];
+
+  //PHYSICAL PARAMETERS
+  double mu=ps[1];
+
+  //VARIABLES
+  double r=y[0],f=y[1],q=y[2],dr=y[3],df=y[4],dq=y[5];
+  double dphidy[3];
+  double cosf=cos(f),cosf2=cosf*cosf,sinf=sin(f),tanf=sinf/cosf,sinq=sin(q);
+
+  //EQUATIONS
+  /*dr/dt*/dydt[0]=dr;
+  /*df/dt*/dydt[1]=df;
+  /*dq/dt*/dydt[2]=dq;
+  
+  //GRADIENT OF POTENTIAL
+  gradGeoPotential(t,r,f,q,dphidy,params);
+
+  //ACCELERATION
+  /*d(dr/dt)/dt*/dydt[3]=-dphidy[0]+r*dq*dq*cosf2+r*df*df;
+  /*d(df/dt)/dt*/dydt[4]=-dphidy[1]/(r*r)-2*dr*df/r-df*df*sinf*cosf;
+  /*d(dq/dt)/dt*/dydt[5]=-dphidy[2]/(r*r*cosf2)-2*dr*dq/r+2*dq*df*tanf;
+
+  //*
+  fprintf(stdout,"grad Potential = %e %e %e\n",
+	  dphidy[0],dphidy[1],dphidy[2]);
+  fprintf(stdout,"y = %e %e %e %e %e %e\ndy/dt=%e %e %e %e %e %e\n",
+	  y[0],y[1],y[2],y[3],y[4],y[5],
+	  dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);
+  getchar();
+  //*/
+
+  return 0;
+}
