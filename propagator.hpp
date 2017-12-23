@@ -128,10 +128,42 @@ int savetxt(char* fname,double** x,int n,int m,double* zcol=NULL)
 {
     //SAVE OUTPUT
     FILE* f=fopen(fname,"w");
-    for(int i=n;i-->0;)
+    for(int i=0;i<n;i++){
+      if(zcol!=NULL)
+	fprintf(f,"%.17e ",zcol[i]);
       fprintf(f,"%s\n",vec2strn(x[i],m,"%.17e "));
+    }
+    fclose(f);
     return 0;
 }
+
+/*
+  Difference between files
+*/
+int difftxt(char* fname1,char *fname2,int n,int m)
+{
+  double v1,v2;
+  char fdiff[1000];
+  FILE *f1=fopen(fname1,"r");
+  FILE *f2=fopen(fname2,"r");
+  sprintf(fdiff,"%s_%s.diff",fname1,fname2);
+  FILE *fd=fopen(fdiff,"w");
+  for(int i=0;i<n;i++){
+    fprintf(fd,"%d ",i);
+    for(int j=0;j<m;j++){
+      fscanf(f1,"%lf",&v1);
+      fscanf(f2,"%lf",&v2);
+      fprintf(fd,"%.17e ",fabs(v1-v2));
+      //fprintf(stdout,"i=%d,j=%d: v1 = %e, v2=%e, v1-v2 = %e\n",i,j,v1,v2,fabs(v1-v2));
+    }
+    fprintf(fd,"\n");
+  }
+  fclose(f1);
+  fclose(f2);
+  fclose(fd);
+  return 0;
+}
+
 
 /*
   Transform vector state from cartesian to spherical
@@ -142,6 +174,8 @@ int savetxt(char* fname,double** x,int n,int m,double* zcol=NULL)
   In spice longitude = q, latitude = f
 
   See: http://www.astrosurf.com/jephem/library/li110spherCart_en.htm
+
+  NOTES: Signs of the formulas must be corrected.
  */
 int cart2sph(double s[6],double c[6])
 {
@@ -165,9 +199,9 @@ int sph2cart(double c[6],double s[6])
   double rho=sqrt(c[0]*c[0]+c[1]*c[1]);
 
   //Convert velocity
-  /*Vx*/c[3]=c[0]/s[0]*s[3]+c[1]*s[5]+c[2]*c[0]/rho*s[4];
-  /*Vy*/c[4]=c[1]/s[0]*s[3]-c[0]*s[5]+c[2]*c[1]/rho*s[4];
-  /*Vz*/c[5]=c[2]/s[0]*s[3]-rho*s[4];
+  /*Vx*/c[3]=c[0]/s[0]*s[3]-c[1]*s[5]-c[2]*c[0]/rho*s[4];
+  /*Vy*/c[4]=c[1]/s[0]*s[3]+c[0]*s[5]-c[2]*c[1]/rho*s[4];
+  /*Vz*/c[5]=c[2]/s[0]*s[3]+rho*s[4];
 
   return 0;
 }
@@ -744,7 +778,7 @@ int gradGeoPotential(double et,double r,double f,double q,double dphidy[],void *
   double *ps=(double*)params;
   double mu=ps[1];
 
-  /*dphi/dr*/dphidy[0]=-mu/(r*r);
+  /*dphi/dr*/dphidy[0]=mu/(r*r);
   /*dphi/df*/dphidy[1]=0;
   /*dphi/dq*/dphidy[2]=0;
 
@@ -802,6 +836,13 @@ int solarPressure(double r,double q,double f,double Ftid[],void *params)
 
      1: mu: Gravitational parameter of the central planet (GM)
 
+  NOTES:
+
+  - Equations come from Praire (2008).  However a slight error exists
+    in his expressions in the equation for phi (the term proportional
+    to sin phi cos phi have a factor dphi^2 that in fact is dtheta^2
+    (see http://mathworld.wolfram.com/SphericalCoordinates.html)
+
  */
 int EoM_Full(double t,double y[],double dydt[],void *params) 
 { 
@@ -826,15 +867,14 @@ int EoM_Full(double t,double y[],double dydt[],void *params)
 
   //ACCELERATION
   /*d(dr/dt)/dt*/dydt[3]=-dphidy[0]+r*dq*dq*cosf2+r*df*df;
-  /*d(df/dt)/dt*/dydt[4]=-dphidy[1]/(r*r)-2*dr*df/r-df*df*sinf*cosf;
+  /*d(df/dt)/dt*/dydt[4]=-dphidy[1]/(r*r)-2*dr*df/r-dq*dq*sinf*cosf;
   /*d(dq/dt)/dt*/dydt[5]=-dphidy[2]/(r*r*cosf2)-2*dr*dq/r+2*dq*df*tanf;
 
-  //*
+  /*
   fprintf(stdout,"grad Potential = %e %e %e\n",
 	  dphidy[0],dphidy[1],dphidy[2]);
-  fprintf(stdout,"y = %e %e %e %e %e %e\ndy/dt=%e %e %e %e %e %e\n",
-	  y[0],y[1],y[2],y[3],y[4],y[5],
-	  dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);
+  fprintf(stdout,"r = %e, f = %e, q = %e, dr/dt = %e, df/dt = %e, dq/dt = %e\n",y[0],y[1],y[2],y[3],y[4],y[5]);
+  fprintf(stdout,"dr/dt = %e, df/dt = %e, dq/dt = %e, d2r/dt2 = %e, d2f/dt2 = %e, d2q/dt2 = %e\n",dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);
   getchar();
   //*/
 

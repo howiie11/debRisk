@@ -22,16 +22,29 @@ int main(int argc,char* argv[])
 
  coord:
   {
-    //FIRST OCTANT
-    //          x   y   z   vx  vy  vz
-    double c[]={1.0,0.0,0.0,0.0,+1.0,+1.0};
-    double s[6];
-    cart2sph(s,c);
-    fprintf(stdout,"Cartesian: %s\n",vec2strn(c,6,"%f "));
-    fprintf(stdout,"Spherical: %s\n",vec2strn(s,6,"%f "));
+    {
+      //CARTESIAN TO SPHERICAL
+      //          x   y   z   vx  vy  vz
+      double c[]={1.0,0.0,0.0,0.0,+1.0,+1.0};
+      double s[6];
+      cart2sph(s,c);
+      fprintf(stdout,"Cartesian to Spherical:\n");
+      fprintf(stdout,"\tCartesian: %s\n",vec2strn(c,6,"%f "));
+      fprintf(stdout,"\tSpherical: %s\n",vec2strn(s,6,"%f "));
+    }
+
+    {
+      //SPHERICAL TO CARTESIAN
+      //          r    f    q    vr   vf   vq
+      double s[]={+1.0,+1.57,+3.14,+0.0,+1.0,+0.0};
+      double c[6];
+      sph2cart(c,s);
+      fprintf(stdout,"Spherical to Cartesian:\n");
+      fprintf(stdout,"\tSpherical: %s\n",vec2strn(s,6,"%f "));
+      fprintf(stdout,"\tCartesian: %s\n",vec2strn(c,6,"%f "));
+    }
     exit(0);
   }
-
 
  geopot:
   {
@@ -42,7 +55,7 @@ int main(int argc,char* argv[])
     //INITIAL CONDITION IN CARTESIAN COORDINATES
     double X0[6];
 
-    double Xc0[]={+ro/ul,0.0,0.0,0.0,+vcirc/uv,0.0};
+    double Xc0[]={+ro/ul,0.0,0.0,0.0,0.3,vcirc/uv};
     fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(Xc0,6,"%f "));
 
     cart2sph(X0,Xc0);
@@ -56,16 +69,25 @@ int main(int argc,char* argv[])
 
     //Integration
     double tini=0.0;
-    double h=0.1;
-    int npoints=100;
-    double duration=90*60.0/ut;
-    int nsys=6;
-    double params[]={nsys,1.0};
+    double h=0.01;
+    int npoints=1000;
+    double duration=100*90*60.0/ut;
     double *ts=newVector(npoints);
-    double **X=newMatrix(npoints,nsys);
-    integrateEoM(tini,y,h,npoints,duration,nsys,EoM_Full,params,
+    double **X=newMatrix(npoints,6);
+    double **Xc=newMatrix(npoints,6);
+    integrateEoM(tini,X0,h,npoints,duration,6.0,EoM_Full,params,
 		 ts,X);
+    fprintf(stdout,"Duration = %e\n",duration);
     
+    //TRANSFORM TO CARTESIAN
+    //*
+    for(int i=0;i<npoints;i++) sph2cart(Xc[i],X[i]);
+    savetxt("solution-spherical.dat",Xc,npoints,6,ts);
+    //*/
+    //savetxt("solution-spherical.dat",X,npoints,6,ts);
+
+    goto integ_2B;
+    exit(0);
   }
 
  atmos:
@@ -144,22 +166,35 @@ int main(int argc,char* argv[])
     double vcirc=sqrt(GCONST*ME/ro);//m/s
 
     double tini=0.0;
-    double X0[]={+ro/ul,0.0,0.0,0.0,0.5*vcirc/uv,0.0};
-    double h=0.1;
-    int npoints=100;
-    double duration=90*60.0/ut;
+    double X0[]={+ro/ul,0.0,0.0,0.0,0.3,1.0*vcirc/uv};
+    fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(X0,6,"%f "));
+
+    double h=0.01;
+    int npoints=1000;
+    double duration=100*90*60.0/ut;
     int nsys=6;
     double params[]={nsys,1.0,ME/um};
   
     double *ts=newVector(npoints);
     double **X=newMatrix(npoints,nsys);
+    double **Xs=newMatrix(npoints,nsys);
   
     //CALL THE INTEGRATION ROUTINE
+    fprintf(stdout,"Integrating cartesian coordinates\n");
     integrateEoM(tini,X0,h,npoints,duration,nsys,EoM_2B,params,
 		 ts,X);
 
+    //TRANSFORM TO SPHERICAL
+    /*
+    for(int i=0;i<npoints;i++) cart2sph(Xs[i],X[i]);
+    savetxt("solution-cartesian.dat",Xs,npoints,6,ts);    
+    //*/
+    savetxt("solution-cartesian.dat",X,npoints,6,ts);
+
+    difftxt("solution-cartesian.dat","solution-spherical.dat",npoints,7);
+    /*
     //SAVE OUTPUT
-    FILE* f=fopen("solucion.dat","w");
+    FILE* f=fopen("solution-cartesian.dat","w");
     for(int i=0;i<npoints;i++){
       fprintf(f,"%.17e %.17e %.17e %.17e %.17e %.17e %.17e\n",
 	      ts[i],
@@ -167,6 +202,7 @@ int main(int argc,char* argv[])
 	      X[i][3]*uv,X[i][4]*uv,X[i][5]*uv
 	      );
     }
+    */
     exit(0);
   }
   //*/
