@@ -177,7 +177,7 @@ int difftxt(char* fname1,char *fname2,int n,int m)
 
   NOTES: Signs of the formulas must be corrected.
  */
-int cart2sph(double s[6],double c[6])
+int car2sph(double s[6],double c[6])
 {
   //Convert cartesian coordinates to spherical
   reclat_c(c,&s[0],&s[2],&s[1]);
@@ -192,8 +192,7 @@ int cart2sph(double s[6],double c[6])
 
   return 0;
 }
-
-int sph2cart(double c[6],double s[6])
+int sph2car(double c[6],double s[6])
 {
   latrec_c(s[0],s[2],s[1],c);
   double rho=sqrt(c[0]*c[0]+c[1]*c[1]);
@@ -205,6 +204,29 @@ int sph2cart(double c[6],double s[6])
 
   return 0;
 }
+int vec_car2sph(double vs[3],double vc[3],double s[3])
+{
+  double q=M_PI/2-s[1];
+  double f=s[2];
+  double sinq=sin(q),cosq=cos(q),sinf=sin(f),cosf=cos(f);
+  double T[][3]={{sinq*cosf,sinq*sinf,cosq},
+		 {-cosq*cosf,cosq*sinf,-sinq},
+		 {-sinf,cosf,0}};
+  mxv_c(T,vc,vs);
+  return 0;
+}
+int vec_sph2car(double vc[3],double vs[3],double s[3])
+{
+  double q=M_PI/2-s[1];
+  double f=s[2];
+  double sinq=sin(q),cosq=cos(q),sinf=sin(f),cosf=cos(f);
+  double T[][3]={{sinq*cosf,cosq*cosf,-sinf},
+		 {sinq*sinf,cosq*sinf,+cosf},
+		 {cosq,-sinq,0}};
+  mxv_c(T,vs,vc);
+  return 0;
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 //CORE ROUTINES
@@ -803,8 +825,22 @@ int tidalForce(double et,double r,double f,double q,double Ftid[],void *params)
 
   Parameteres:
      1: mu: Gravitational parameter of the central planet (GM)
+
+
+  NOTE: Remember to include the rotation of Earth when calculating the
+  relative velocity:
+
+  v_e = r w_e cos b [ (sin f cos q - cos f cos i sin q) a_r - 
+                     (cos f cos i cos q + sin f sin q) a_q +
+		     (cos f sin i) a_f ]
+
+  See: Wu (1965)
+
+  Where:
+  f: 
+  
  */
-int atmosDrag(double et,double r,double q,double f,double Ftid[],void *params)
+int atmosDrag(double et,double r,double q,double f,double Fdrag[],void *params)
 {
   double *ps=(double*)params;
   

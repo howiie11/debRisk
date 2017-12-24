@@ -1,6 +1,13 @@
 #include <propagator.hpp>
 using namespace std;
 
+/*
+  Rate of variation of longitude of the nodes and periapse argument:
+  http://www.braeunig.us/space/orbmech.htm
+  http://www.braeunig.us/space/atmos.htm
+
+ */
+
 int main(int argc,char* argv[])
 {
   //COMMON
@@ -27,7 +34,7 @@ int main(int argc,char* argv[])
       //          x   y   z   vx  vy  vz
       double c[]={1.0,0.0,0.0,0.0,+1.0,+1.0};
       double s[6];
-      cart2sph(s,c);
+      car2sph(s,c);
       fprintf(stdout,"Cartesian to Spherical:\n");
       fprintf(stdout,"\tCartesian: %s\n",vec2strn(c,6,"%f "));
       fprintf(stdout,"\tSpherical: %s\n",vec2strn(s,6,"%f "));
@@ -38,7 +45,7 @@ int main(int argc,char* argv[])
       //          r    f    q    vr   vf   vq
       double s[]={+1.0,+1.57,+3.14,+0.0,+1.0,+0.0};
       double c[6];
-      sph2cart(c,s);
+      sph2car(c,s);
       fprintf(stdout,"Spherical to Cartesian:\n");
       fprintf(stdout,"\tSpherical: %s\n",vec2strn(s,6,"%f "));
       fprintf(stdout,"\tCartesian: %s\n",vec2strn(c,6,"%f "));
@@ -58,7 +65,7 @@ int main(int argc,char* argv[])
     double Xc0[]={+ro/ul,0.0,0.0,0.0,0.3,vcirc/uv};
     fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(Xc0,6,"%f "));
 
-    cart2sph(X0,Xc0);
+    car2sph(X0,Xc0);
     fprintf(stdout,"Initial conditions (spherical): %s\n",vec2strn(X0,6,"%f "));
 
     double dydt[6];
@@ -81,7 +88,7 @@ int main(int argc,char* argv[])
     
     //TRANSFORM TO CARTESIAN
     //*
-    for(int i=0;i<npoints;i++) sph2cart(Xc[i],X[i]);
+    for(int i=0;i<npoints;i++) sph2car(Xc[i],X[i]);
     savetxt("solution-spherical.dat",Xc,npoints,6,ts);
     //*/
     //savetxt("solution-spherical.dat",X,npoints,6,ts);
@@ -186,7 +193,7 @@ int main(int argc,char* argv[])
 
     //TRANSFORM TO SPHERICAL
     /*
-    for(int i=0;i<npoints;i++) cart2sph(Xs[i],X[i]);
+    for(int i=0;i<npoints;i++) car2sph(Xs[i],X[i]);
     savetxt("solution-cartesian.dat",Xs,npoints,6,ts);    
     //*/
     savetxt("solution-cartesian.dat",X,npoints,6,ts);
