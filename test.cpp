@@ -11,21 +11,74 @@ using namespace std;
 int main(int argc,char* argv[])
 {
   //COMMON
-  double RE=6.371e6;//m
-  double ME=5.98e24;//kg
+  double RE=REARTH;//m
+  double ME=MUEARTH/GCONST;//kg
 
-  //CANONIC UNITS
-  double ul=RE;
-  double um=ME;
-  double ut=sqrt(ul*ul*ul/(GCONST*um));
-  double uv=ul/ut;
+  //INITIALIZE PROPAGATOR
+  initPropagator();
 
   //WHICH MODULE DO YOU WANT TO TEST
+  goto elem;//ELEMENTS
+  goto integ_2B;//INTEGRATOR TWO-BODY PROBLEM
   goto geopot;//GEOPOTENTIAL
   goto coord;//COORDINATE TRANSFORMATION
-  goto integ_2B;//INTEGRATOR TWO-BODY PROBLEM
   goto atmos;//ATMOSPHERIC MODEL
   goto integ_mas;//INTEGRATOR MAS
+
+ elem:
+  {
+    /*
+      You can see elements variations in:
+      http://www.braeunig.us/space/orbmech.htm
+     */
+    
+    //INITIAL CONDITIONS
+    double H=300e3;//m
+    double ro=REARTH+H;
+
+    //INITIAL ORBITAL ELEMENTS
+    double ao=ro/UL;
+    double eo=0.5;
+    double io=30.0*DEG;
+    double Wo=60.0*DEG;
+    double wo=45.0*DEG;
+    double Mo=0.0*DEG;
+    double to=0.0;
+    double mu=1.0;
+    double P=2*M_PI/sqrt(mu/(ao*ao*ao));
+    fprintf(stdout,"P = %e\n",P);
+    double elts[]={ao*(1-eo),eo,io,Wo,wo,Mo,to,mu};
+    fprintf(stdout,"Initial elements: %s\n",vec2strn(elts,8,"%f "));
+
+    //STATE VECTOR
+    double X0[6],Xc0[6];
+    conics_c(elts,to,Xc0);
+    fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(Xc0,6,"%f "));
+    car2sph(X0,Xc0);
+    fprintf(stdout,"Initial conditions (spherical): %s\n",vec2strn(X0,6,"%f "));
+
+    //Integration
+    double tini=0.0;
+    double h=0.01;
+    int npoints=10000;
+    double duration=100*P;
+    fprintf(stdout,"Duration = %e\n",duration);
+    double *ts=newVector(npoints);
+    double **X=newMatrix(npoints,6);
+    double **Xc=newMatrix(npoints,6);
+    double params[]={6.0,mu};
+    integrateEoM(tini,X0,h,npoints,duration,6.0,EoM_Fulla,params,
+		 ts,X);
+
+    for(int i=0;i<npoints;i++) sph2car(Xc[i],X[i]);
+    savetxt("solution-elements.dat",Xc,npoints,6,ts);
+
+    double **E=newMatrix(npoints,8);
+    for(int i=0;i<npoints;i++) oscelt_c(Xc[i],ts[i],mu,E[i]);
+    savetxt("elements.dat",E,npoints,8,ts);
+
+    exit(0);
+  }
 
  coord:
   {
@@ -56,13 +109,13 @@ int main(int argc,char* argv[])
  geopot:
   {
     double H=300e3;//m
-    double ro=RE+H;
-    double vcirc=sqrt(GCONST*ME/ro);//m/s
+    double ro=REARTH+H;
+    double vcirc=sqrt(GCONST*MEARTH/ro);//m/s
 
     //INITIAL CONDITION IN CARTESIAN COORDINATES
     double X0[6];
 
-    double Xc0[]={+ro/ul,0.0,0.0,0.0,0.3,vcirc/uv};
+    double Xc0[]={+ro/UL,0.0,0.0,0.0,0.0,vcirc/UV};
     fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(Xc0,6,"%f "));
 
     car2sph(X0,Xc0);
@@ -77,12 +130,12 @@ int main(int argc,char* argv[])
     //Integration
     double tini=0.0;
     double h=0.01;
-    int npoints=1000;
-    double duration=100*90*60.0/ut;
+    int npoints=100;
+    double duration=90*60.0/UT;
     double *ts=newVector(npoints);
     double **X=newMatrix(npoints,6);
     double **Xc=newMatrix(npoints,6);
-    integrateEoM(tini,X0,h,npoints,duration,6.0,EoM_Full,params,
+    integrateEoM(tini,X0,h,npoints,duration,6.0,EoM_Fulla,params,
 		 ts,X);
     fprintf(stdout,"Duration = %e\n",duration);
     
@@ -93,7 +146,7 @@ int main(int argc,char* argv[])
     //*/
     //savetxt("solution-spherical.dat",X,npoints,6,ts);
 
-    goto integ_2B;
+    //goto integ_2B;
     exit(0);
   }
 
@@ -169,18 +222,23 @@ int main(int argc,char* argv[])
  integ_2B:
   {
     double H=300e3;//m
-    double ro=RE+H;
-    double vcirc=sqrt(GCONST*ME/ro);//m/s
+    double ro=REARTH+H;
+    double vcirc=sqrt(GCONST*MEARTH/ro);//m/s
 
     double tini=0.0;
-    double X0[]={+ro/ul,0.0,0.0,0.0,0.3,1.0*vcirc/uv};
+    double X0[]={+ro/UL,0.0,0.0,0.0,1.0*vcirc/UV,0.0};
     fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(X0,6,"%f "));
 
     double h=0.01;
     int npoints=1000;
-    double duration=100*90*60.0/ut;
+    double ao=ro/UL;
+    double mu=1.0;
+    double P=2*M_PI/sqrt(mu/(ao*ao*ao));
+    fprintf(stdout,"P = %e\n",P);
+    double duration=P/2;
+    fprintf(stdout,"Duration = %e\n",duration);
     int nsys=6;
-    double params[]={nsys,1.0,ME/um};
+    double params[]={nsys,1.0,MEARTH/UM};
   
     double *ts=newVector(npoints);
     double **X=newMatrix(npoints,nsys);
@@ -205,8 +263,8 @@ int main(int argc,char* argv[])
     for(int i=0;i<npoints;i++){
       fprintf(f,"%.17e %.17e %.17e %.17e %.17e %.17e %.17e\n",
 	      ts[i],
-	      X[i][0]*ul/1e3,X[i][1]*ul/1e3,X[i][2]*ul/1e3,
-	      X[i][3]*uv,X[i][4]*uv,X[i][5]*uv
+	      X[i][0]*UL/1e3,X[i][1]*UL/1e3,X[i][2]*UL/1e3,
+	      X[i][3]*UV,X[i][4]*UV,X[i][5]*UV
 	      );
     }
     */

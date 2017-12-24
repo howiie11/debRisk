@@ -1,10 +1,17 @@
 ////////////////////////////////////////////////////////////////////////
+//CONFIGURATION
+////////////////////////////////////////////////////////////////////////
+#define VERBOSE 1
+
+////////////////////////////////////////////////////////////////////////
 //BASIC LIBRARIES
 ////////////////////////////////////////////////////////////////////////
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <stdexcept>
 
 ////////////////////////////////////////////////////////////////////////
 //ADDITIONAL LIBRARIES
@@ -14,17 +21,94 @@
 #include <eph_manager.h>
 
 ////////////////////////////////////////////////////////////////////////
+//GSL
+////////////////////////////////////////////////////////////////////////
+#include <gsl/gsl_const_mksa.h>
+#include <gsl/gsl_errno.h>
+#include <gsl/gsl_math.h>
+#include <gsl/gsl_rng.h>
+#include <gsl/gsl_randist.h>
+#include <gsl/gsl_sf_legendre.h>
+
+////////////////////////////////////////////////////////////////////////
 //BASIC MACROS
 ////////////////////////////////////////////////////////////////////////
+#define RAD 180/M_PI
+#define DEG M_PI/180
 #define EXTMET 1
 #define TOLERANCE 1E-10
 #define ATTEMPTS 12 /*SEE NUMBER_OF_STEPS*/
-static int NUMBER_OF_STEPS[]={2,4,6,8,12,16,24,32,48,64,96,128};
+#define VPRINT if(VERBOSE) printf
+#define PAUSE if(VERBOSE) getchar
 
 ////////////////////////////////////////////////////////////////////////
 //PHYSICAL CONSTANTS
 ////////////////////////////////////////////////////////////////////////
-#define GCONST 6.67E-11
+#define GCONST GSL_CONST_MKSA_GRAVITATIONAL_CONSTANT //m^3/kg s^2
+
+//WGS84
+#define REARTH 6.378137E6 //m
+#define FEARTH 1/298.257223563
+#define MUEARTH 3.986004418E14 //m^3/s^2
+#define WEARTH 7.292115E-5 //rad/s
+
+////////////////////////////////////////////////////////////////////////
+//GLOBAL VARIABLES
+////////////////////////////////////////////////////////////////////////
+static int NUMBER_OF_STEPS[]={2,4,6,8,12,16,24,32,48,64,96,128};
+gsl_rng* RAND;
+
+#define MAXN 4
+#define MAXM 4
+double C[][MAXM+1]={{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
+double S[][MAXM+1]={{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
+double J[][MAXM+1]={{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
+double Q[][MAXM+1]={{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
+double UL,UM,UT,UV;
+double MEARTH;
+
+////////////////////////////////////////////////////////////////////////
+//INITIALIZE
+////////////////////////////////////////////////////////////////////////
+//void errorGSL(const char * reason,const char * file,int line,int gsl_errno){throw(1);}
+int initPropagator(void)
+{
+  SpiceInt i,n;
+  
+  //CONFIGURATION
+  #include<propagator.conf>
+
+  //INITIALIZE GSL ERROR HANDLER
+  //gsl_set_error_handler(&errorGSL); 
+
+  //KERNELS
+  furnsh_c("util/kernels/kernels.txt");
+
+  //RANDOM NUMBERS
+  RAND=gsl_rng_alloc(gsl_rng_default);
+  gsl_rng_set(RAND,time(NULL));
+  gsl_rng_set(RAND,3);
+
+  //INIT ZONAL AND TESSERAL HARMINICS
+  #include<harmonics-earth.hpp>
+  for(int n=MAXM+1;n-->0;){
+    J[n][0]=C[n][0];
+    for(int m=MAXN+1;m-->1;){
+      J[n][m]=sqrt(C[n][m]*C[n][m]+S[n][m]*S[n][m]);
+      if(m>0)
+	Q[n][m]=(1/m)*atan2(S[n][m],C[n][m]);
+    }
+  }
+
+  //DERIVED CONSTANTS
+  MEARTH=MUEARTH/GCONST;
+
+  //UNITS
+  UT=sqrt(UL*UL*UL/(GCONST*UM));
+  UV=UL/UT;
+  
+  return 0;
+}
 
 ////////////////////////////////////////////////////////////////////////
 //UTIL ROUTINES
@@ -154,7 +238,7 @@ int difftxt(char* fname1,char *fname2,int n,int m)
       fscanf(f1,"%lf",&v1);
       fscanf(f2,"%lf",&v2);
       fprintf(fd,"%.17e ",fabs(v1-v2));
-      //fprintf(stdout,"i=%d,j=%d: v1 = %e, v2=%e, v1-v2 = %e\n",i,j,v1,v2,fabs(v1-v2));
+      //VPRINT("i=%d,j=%d: v1 = %e, v2=%e, v1-v2 = %e\n",i,j,v1,v2,fabs(v1-v2));
     }
     fprintf(fd,"\n");
   }
@@ -210,9 +294,11 @@ int vec_car2sph(double vs[3],double vc[3],double s[3])
   double f=s[2];
   double sinq=sin(q),cosq=cos(q),sinf=sin(f),cosf=cos(f);
   double T[][3]={{sinq*cosf,sinq*sinf,cosq},
-		 {-cosq*cosf,cosq*sinf,-sinq},
+		 {cosq*cosf,cosq*sinf,-sinq},
 		 {-sinf,cosf,0}};
   mxv_c(T,vc,vs);
+  double vr=vs[0],vq=vs[2],vf=-vs[1];
+  vs[0]=vr;vs[1]=vf;vs[2]=vq;
   return 0;
 }
 int vec_sph2car(double vc[3],double vs[3],double s[3])
@@ -226,7 +312,6 @@ int vec_sph2car(double vc[3],double vs[3],double s[3])
   mxv_c(T,vs,vc);
   return 0;
 }
-
 
 ////////////////////////////////////////////////////////////////////////
 //CORE ROUTINES
@@ -421,8 +506,8 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
     ts[i]=t;
     
     /*
-    fprintf(stdout,"t=%e, y=%e %e %e %e %e %e\n",
-	    t,x0[0],x0[1],x0[2],x0[3],x0[4],x0[5]);
+    VPRINT("t=%e, h=%e, y=%e %e %e %e %e %e\n",
+	    t,h_used,x0[0],x0[1],x0[2],x0[3],x0[4],x0[5]);
     getchar();
     //*/
 
@@ -438,7 +523,7 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
 				    TOLERANCE,params);
 
 	/*
-	fprintf(stdout,"t=%e, y=%e %e %e %e %e %e, hnext = %e, %d\n",
+	VPRINT("t=%e, y=%e %e %e %e %e %e, hnext = %e, %d\n",
 		t,x[0],x[1],x[2],x[3],x[4],x[5],h_next,direction);
 	getchar();
 	//*/
@@ -710,68 +795,16 @@ int NRLMSISE(int day,double sec,
 }
 
 ////////////////////////////////////////////////////////////////////////
-//OTHER ROUTINES
+//PHYSICAL ROUTINES
 ////////////////////////////////////////////////////////////////////////
 /*
-  This is a prototype routine for integrate
-
-  MAS:
-    dx/dt = v
-    dv/dt = -w^2 x
-    
  */
-int EoM_MAS(double t,double y[],double dydt[],void *params) 
-{ 
-  double *ps=(double*)params;
-  int nsys=(int)ps[0];
-  
-  //PHYSICAL PARAMETERS
-  double w=ps[1];
-
-  //EQUATIONS
-  dydt[0]=y[1];
-  dydt[1]=-w*w*y[0];
-
-  return 0;
-}
-
-/*
-  This is a prototype routine for integrate
-
-  2B:
-    dr/dt = v
-    dv/dt = -GM/r^3 r
-
-  r,v vectors
-    
- */
-int EoM_2B(double t,double y[],double dydt[],void *params) 
-{ 
-  double *ps=(double*)params;
-  int nsys=(int)ps[0];
-  
-  //PHYSICAL PARAMETERS
-  double G=ps[1];
-  double M=ps[2];
-
-  //EQUATIONS
-  dydt[0]=y[3];
-  dydt[1]=y[4];
-  dydt[2]=y[5];
-  
-  double r=sqrt(y[0]*y[0]+y[1]*y[1]+y[2]*y[2]);
-  dydt[3]=-G*M/(r*r*r)*y[0];
-  dydt[4]=-G*M/(r*r*r)*y[1];
-  dydt[5]=-G*M/(r*r*r)*y[2];
-
-  /*
-  fprintf(stdout,"%e %e %e %e %e %e\n%e %e %e %e %e %e\n",
-	  y[0],y[1],y[2],y[3],y[4],y[5],
-	  dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);
-  getchar();
-  */
-
-  return 0;
+double earthRadius(double lon,double lat)
+{
+  double epos[3];
+  georec_c(lon,lat,0.0,REARTH/UL,FEARTH,epos);
+  double rs=vnorm_c(epos);
+  return rs;
 }
 
 /*
@@ -800,9 +833,61 @@ int gradGeoPotential(double et,double r,double f,double q,double dphidy[],void *
   double *ps=(double*)params;
   double mu=ps[1];
 
+  //SPHERICAL
   /*dphi/dr*/dphidy[0]=mu/(r*r);
   /*dphi/df*/dphidy[1]=0;
   /*dphi/dq*/dphidy[2]=0;
+  VPRINT("Spherical potential: %s\n",vec2strn(dphidy,3,"%.17e "));
+
+  //HARMONIC EXPANSION
+  double dphidyc[]={0.0,0.0,0.0};
+  double cosm,sinm,Pnm,Pnmp,Ror,Rorn,muor,u,norm;
+  int inm;
+  
+  //ASSOCIATED LEGENDRE POLYNOMIAL
+  u=sin(f);
+  VPRINT("u = %.17e\n",u);
+  int nmax=gsl_sf_legendre_array_n(MAXN);
+  double aPnm[nmax+1],aPnmp[nmax+1];
+  gsl_sf_legendre_deriv_array((gsl_sf_legendre_t)1.0,MAXN,u,aPnm,aPnmp);
+  VPRINT("Number of functions: %d\n",nmax);
+  VPRINT("Functions: %s\n",vec2strn(aPnm,nmax,"%e "));
+
+  //COMPUTE HARMONIC CORRECTION
+  Ror=1.0/r;
+  muor=mu/r;
+  VPRINT("Coordinates:\n\tr = %e, f = %e, q = %e\n\tmu/r = %e, sin(f) = %e\n",r,f,q,muor,u);
+  VPRINT("Components:\n");
+  for(int n=MAXN+1;n-->0;){
+    VPRINT("\tn = %d\n",n);
+    for(int m=0;m<=n;m++){
+      if(J[n][m]==0) continue;
+      VPRINT("\t\tm = %d\n",m);
+
+      inm=gsl_sf_legendre_array_index(n,m);
+      cosm=cos(m*(q-Q[n][m]));
+      sinm=sin(m*(q-Q[n][m]));
+      Pnm=gsl_sf_legendre_Plm(n,m,u);
+      norm=aPnm[inm]/Pnm;
+      Pnmp=aPnmp[inm]/norm;
+      Rorn=gsl_pow_int(Ror,n);
+
+      VPRINT("\t\t\tJnm = %e, Pnm = %e, P'nm = %e, (R/r)^n = %e, Qnm = %e, cosm = %e, sinm = %e, \n",
+	     J[n][m],Pnm,Pnmp,Rorn,Q[n][m],cosm,sinm);
+
+      /*dphi/dr*/dphidyc[0]+=muor*(n+1)*J[n][m]*Rorn*Pnm*cosm;
+      /*dphi/df*/dphidyc[1]+=muor*J[n][m]*Rorn*cos(f)*Pnmp*cosm;
+      /*dphi/dq*/dphidyc[2]+=-muor*m*J[n][m]*Rorn*Pnm*sinm;
+    }
+  }
+  VPRINT("Harmonic correction: %s\n",vec2strn(dphidyc,3,"%.17e "));
+  PAUSE();
+  
+  //*
+  dphidy[0]+=dphidyc[0];
+  dphidy[1]+=dphidyc[0];
+  dphidy[2]+=dphidyc[0];
+  //*/
 
   return 0;
 }
@@ -860,6 +945,71 @@ int solarPressure(double r,double q,double f,double Ftid[],void *params)
   return 0;
 }
 
+////////////////////////////////////////////////////////////////////////
+//OTHER ROUTINES
+////////////////////////////////////////////////////////////////////////
+/*
+  This is a prototype routine for integrate
+
+  MAS:
+    dx/dt = v
+    dv/dt = -w^2 x
+    
+ */
+int EoM_MAS(double t,double y[],double dydt[],void *params) 
+{ 
+  double *ps=(double*)params;
+  int nsys=(int)ps[0];
+  
+  //PHYSICAL PARAMETERS
+  double w=ps[1];
+
+  //EQUATIONS
+  dydt[0]=y[1];
+  dydt[1]=-w*w*y[0];
+
+  return 0;
+}
+
+/*
+  This is a prototype routine for integrate
+
+  2B:
+    dr/dt = v
+    dv/dt = -GM/r^3 r
+
+  r,v vectors
+    
+ */
+int EoM_2B(double t,double y[],double dydt[],void *params) 
+{ 
+  double *ps=(double*)params;
+  int nsys=(int)ps[0];
+  
+  //PHYSICAL PARAMETERS
+  double G=ps[1];
+  double M=ps[2];
+
+  //EQUATIONS
+  dydt[0]=y[3];
+  dydt[1]=y[4];
+  dydt[2]=y[5];
+  
+  double r=sqrt(y[0]*y[0]+y[1]*y[1]+y[2]*y[2]);
+  dydt[3]=-G*M/(r*r*r)*y[0];
+  dydt[4]=-G*M/(r*r*r)*y[1];
+  dydt[5]=-G*M/(r*r*r)*y[2];
+
+  /*
+  VPRINT("%e %e %e %e %e %e\n%e %e %e %e %e %e\n",
+	  y[0],y[1],y[2],y[3],y[4],y[5],
+	  dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);
+  getchar();
+  */
+
+  return 0;
+}
+
 /*
   Satellite equations in spherical coordinates
   
@@ -907,10 +1057,95 @@ int EoM_Full(double t,double y[],double dydt[],void *params)
   /*d(dq/dt)/dt*/dydt[5]=-dphidy[2]/(r*r*cosf2)-2*dr*dq/r+2*dq*df*tanf;
 
   /*
-  fprintf(stdout,"grad Potential = %e %e %e\n",
+  VPRINT("grad Potential = %e %e %e\n",
 	  dphidy[0],dphidy[1],dphidy[2]);
-  fprintf(stdout,"r = %e, f = %e, q = %e, dr/dt = %e, df/dt = %e, dq/dt = %e\n",y[0],y[1],y[2],y[3],y[4],y[5]);
-  fprintf(stdout,"dr/dt = %e, df/dt = %e, dq/dt = %e, d2r/dt2 = %e, d2f/dt2 = %e, d2q/dt2 = %e\n",dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);
+  VPRINT("r = %e, f = %e, q = %e, dr/dt = %e, df/dt = %e, dq/dt = %e\n",y[0],y[1],y[2],y[3],y[4],y[5]);
+  VPRINT("dr/dt = %e, df/dt = %e, dq/dt = %e, d2r/dt2 = %e, d2f/dt2 = %e, d2q/dt2 = %e\n",dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);
+  getchar();
+  //*/
+
+  return 0;
+}
+
+int EoM_Fulla(double t,double y[],double dydt[],void *params) 
+{ 
+  double *ps=(double*)params;
+  int nsys=(int)ps[0];
+
+  ////////////////////////////////////////////////////
+  //PHYSICAL PARAMETERS
+  ////////////////////////////////////////////////////
+  double mu=ps[1];
+
+  ////////////////////////////////////////////////////
+  //GET COORDINATES
+  ////////////////////////////////////////////////////
+  double r=y[0],f=y[1],q=y[2],dr=y[3],df=y[4],dq=y[5];
+  VPRINT("Distance to corresponding earth's surface: r = %.17e, rs = %.17e\n",r,earthRadius(q,f));
+
+  if(r<earthRadius(q,f)){
+    fprintf(stderr,"Satellite has collided with the central body\n");
+    throw(1);
+  }
+  
+  double dphidy[3];
+  double cosf=cos(f),cosf2=cosf*cosf,sinf=sin(f),tanf=sinf/cosf,sinq=sin(q);
+  //VPRINT("r = %+e, f = %+e, q = %+e\n",r,f,q);
+
+  ////////////////////////////////////////////////////
+  //ACCELERATIONS
+  ////////////////////////////////////////////////////
+  double a[]={0,0,0};
+
+  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  //GRAVITATIONAL POTENTIAL
+  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  gradGeoPotential(t,r,f,q,dphidy,params);
+  double g[]={-dphidy[0],
+	      -dphidy[1]/(r*r),
+	      -dphidy[2]/(r*r*cosf2)};
+  vadd_c(g,a,a);
+  //VPRINT("ar = %+e, af = %+e, aq = %+e\n",g[0],g[1],g[2]);
+
+  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  //N-BODY
+  //%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  /*TEST
+  //CONVERT TO CARTESIAN
+  double rc[6];
+  sph2car(rc,y);
+  //VPRINT("x = %+e, y = %+e, z = %+e\n",rc[0],rc[1],rc[2]);
+  double gc[]={
+    -mu/(r*r*r)*rc[0],
+    -mu/(r*r*r)*rc[1],
+    -mu/(r*r*r)*rc[2]
+  };
+  //VPRINT("ax = %+e, ay = %+e, az = %+e\n",gc[0],gc[1],gc[2]);
+  //VPRINT("|ac|=%e\n",vnorm_c(gc));
+  double gs[3];
+  //CONVERT TO SPHERICAL
+  vec_car2sph(gs,gc,y);
+  vadd_c(gs,a,a);
+  //VPRINT("ar = %+e, af = %+e, aq = %+e\n",gs[0],gs[1],gs[2]);
+  //VPRINT("|as|=%e\n",vnorm_c(gs));
+  //getchar();
+  //*/
+
+  ////////////////////////////////////////////////////
+  //EQUATIONS
+  ////////////////////////////////////////////////////
+  /*dr/dt*/dydt[0]=dr;
+  /*df/dt*/dydt[1]=df;
+  /*dq/dt*/dydt[2]=dq;
+  /*d(dr/dt)/dt*/dydt[3]=a[0]+r*dq*dq*cosf2+r*df*df;
+  /*d(df/dt)/dt*/dydt[4]=a[1]-2*dr*df/r-dq*dq*sinf*cosf;
+  /*d(dq/dt)/dt*/dydt[5]=a[2]-2*dr*dq/r+2*dq*df*tanf;
+
+  /*
+  VPRINT("grad Potential = %e %e %e\n",
+	  dphidy[0],dphidy[1],dphidy[2]);
+  VPRINT("r = %e, f = %e, q = %e, dr/dt = %e, df/dt = %e, dq/dt = %e\n",y[0],y[1],y[2],y[3],y[4],y[5]);
+  VPRINT("dr/dt = %e, df/dt = %e, dq/dt = %e, d2r/dt2 = %e, d2f/dt2 = %e, d2q/dt2 = %e\n",dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);
   getchar();
   //*/
 
