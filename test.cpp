@@ -47,7 +47,7 @@ int main(int argc,char* argv[])
     double mu=1.0;
     double P=2*M_PI/sqrt(mu/(ao*ao*ao));
     double h=0.01;
-    double duration=500.0*P;
+    double duration=10.0*P;
     int npoints=(int)(50*duration/P);//50 is the number of points per orbit
     fprintf(stdout,"P = %e hours\n",P*UT/3600);
     double elts[]={ao*(1-eo),eo,io,Wo,wo,Mo,to,mu};

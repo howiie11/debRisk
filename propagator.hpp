@@ -93,10 +93,10 @@ int initPropagator(void)
   gsl_rng_set(RAND,3);
 
   //INIT ZONAL AND TESSERAL HARMINICS
-  //#include<harmonics-earth.hpp>
+  #include<harmonics-earth.hpp>
   //#include<harmonics-ideal.hpp>
   //#include<harmonics-spherical.hpp>
-  #include<harmonics-artificial.hpp>
+  //#include<harmonics-artificial.hpp>
   for(int n=MAXM+1;n-->0;){
     J[n][0]=C[n][0];
     for(int m=MAXN+1;m-->1;){
@@ -253,7 +253,6 @@ int difftxt(char* fname1,char *fname2,int n,int m)
   fclose(fd);
   return 0;
 }
-
 
 /*
   Transform vector state from cartesian to spherical

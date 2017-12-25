@@ -25,7 +25,7 @@ dtheta=radians(60)
 qaxis=1
 
 #ANIMATION
-trate=1000
+trate=500
 retain=50
 
 ###############################################################
