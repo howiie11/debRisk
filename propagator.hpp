@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////
 //CONFIGURATION
 ////////////////////////////////////////////////////////////////////////
-#define VERBOSE 1
+#define VERBOSE 0
 
 ////////////////////////////////////////////////////////////////////////
 //BASIC LIBRARIES
@@ -52,6 +52,9 @@
 #define MUEARTH 3.986004418E14 //m^3/s^2
 #define WEARTH 7.292115E-5 //rad/s
 
+#define HOUR 3600.0
+#define DAY 86400.0
+
 ////////////////////////////////////////////////////////////////////////
 //GLOBAL VARIABLES
 ////////////////////////////////////////////////////////////////////////
@@ -90,7 +93,9 @@ int initPropagator(void)
   gsl_rng_set(RAND,3);
 
   //INIT ZONAL AND TESSERAL HARMINICS
-  #include<harmonics-earth.hpp>
+  //#include<harmonics-earth.hpp>
+  #include<harmonics-ideal.hpp>
+  //#include<harmonics-spherical.hpp>
   for(int n=MAXM+1;n-->0;){
     J[n][0]=C[n][0];
     for(int m=MAXN+1;m-->1;){
@@ -471,6 +476,7 @@ int Gragg_Bulirsch_Stoer(int (*f)(double,double*,double*,void*),
 ////////////////////////////////////////////////////////////////////////
 //INTEGRATION ROUTINE
 ////////////////////////////////////////////////////////////////////////
+int NPS;
 int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
 		 int nsys,int eom(double,double*,double*,void*),void *params,
 		 double *ts,double** X)
@@ -502,6 +508,7 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
     fprintf(stderr,"System dimension (nsys = %d) and parameter vector (params[0] = %d) does not coincide. Please fix.\n",nsys,p0);
 
   //INTEGRATE
+  NPS=0;
   for(int i=0;i<npoints;i++) {
     ts[i]=t;
     
@@ -512,6 +519,8 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
     //*/
 
     copyVec(X[i],x0,nsys);
+    NPS++;
+
     deltat=t-tini;
     if(direction*((t_start+t_step)-tend)>0) t_step=(tend-t_start);
     t_stop=t_start+t_step;
@@ -558,85 +567,6 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
 ////////////////////////////////////////////////////////////////////////
 //ATMOSPHERIC MODEL NRLMSISE
 ////////////////////////////////////////////////////////////////////////
-typedef float real;
-real *newVectorf(int n)
-{
-  real *v;
-  v=(real*)malloc(n*sizeof(real));
-  return v;
-}
-extern "C" void gtd6_(int* IYD,real* SEC,real* ALT,real* GLAT,real* GLONG,
-		      real* STL,real* F107A,real* F107,real AP[],int* MASS,
-		      real D[],real T[]);
-/*
-       IYD - YEAR AND DAY AS YYDDD or DDD (day of year from 1 to 365)
-       SEC - UT(SEC)
-       ALT - ALTITUDE(KM)
-       GLAT - GEODETIC LATITUDE(DEG)
-       GLONG - GEODETIC LONGITUDE(DEG)
-       STL - LOCAL APPARENT SOLAR TIME(HRS)
-       AP - MAGNETIC INDEX(DAILY) OR WHEN SW(9)=-1. :
-          - ARRAY CONTAINING:
-	    (1) F107A - 3 MONTH AVERAGE OF F10.7 FLUX
-	    (2) F107 - DAILY F10.7 FLUX FOR PREVIOUS DAY
-            (3) DAILY AP
-            (4) 3 HR AP INDEX FOR CURRENT TIME
-            (5) 3 HR AP INDEX FOR 3 HRS BEFORE CURRENT TIME
-            (6) 3 HR AP INDEX FOR 6 HRS BEFORE CURRENT TIME
-            (7) 3 HR AP INDEX FOR 9 HRS BEFORE CURRENT TIME
-            (8) AVERAGE OF EIGHT 3 HR AP INDICIES FROM 12 TO 33 HRS PRIOR
-                TO CURRENT TIME
-            (9) AVERAGE OF EIGHT 3 HR AP INDICIES FROM 36 TO 59 HRS PRIOR
-                TO CURRENT TIME
-       MASS - MASS NUMBER (ONLY DENSITY FOR SELECTED GAS IS
-                CALCULATED.  MASS 0 IS TEMPERATURE.  MASS 48 FOR ALL.
-
-    Note:  Ut, Local Time, and Longitude are used independently in the
-           model and are not of equal importance for every situation.  
-           For the most physically realistic calculation these three
-           variables should be consistent (STL=SEC/3600+GLONG/15).
-           F107, F107A, and AP effects are not large below 80 km 
-           and these can be set to 150., 150., and 4. respectively.
-
-    OUTPUT:
-       D(1) - HE NUMBER DENSITY(CM-3)
-       D(2) - O NUMBER DENSITY(CM-3)
-       D(3) - N2 NUMBER DENSITY(CM-3)
-       D(4) - O2 NUMBER DENSITY(CM-3)
-       D(5) - AR NUMBER DENSITY(CM-3)                       
-       D(6) - TOTAL MASS DENSITY(GM/CM3)
-       D(7) - H NUMBER DENSITY(CM-3)
-       D(8) - N NUMBER DENSITY(CM-3)
-       T(1) - EXOSPHERIC TEMPERATURE
-       T(2) - TEMPERATURE AT ALT
- */
-int MSIS90E(int day,double sec,
-	    double alt,double glat,double glon,
-	    double KAP[],
-	    double *rho,double *T)
-{
-  int IYD=day;
-  real SEC=(real)sec;
-  real ALT=(real)alt;
-  real GLAT=(real)glat;
-  real GLONG=(real)glon;
-  real STL=sec/3600.0+GLONG/15.0;
-  real F107A=KAP[0];
-  real F107=KAP[1];
-  int MASS=48;
-  real* AP=newVectorf(7);
-  int k=0,j=2;
-  AP[k++]=KAP[j++];AP[k++]=KAP[j++];AP[k++]=KAP[j++];
-  AP[k++]=KAP[j++];AP[k++]=KAP[j++];AP[k++]=KAP[j++];
-  AP[k++]=KAP[j++];
-  real* D=newVectorf(8);
-  real* Ts=newVectorf(2);
-  gtd6_(&IYD,&SEC,&ALT,&GLAT,&GLONG,&STL,&F107A,&F107,AP,&MASS,D,Ts);
-  *rho=(double)D[5]*1e3;
-  *T=(double)Ts[1];
-  return 0;
-}
-
 /*
   Sources:
     https://www.brodo.de/space/nrlmsise/
@@ -813,15 +743,43 @@ double earthRadius(double lon,double lat)
   Parameteres:
      1: mu: Gravitational parameter of the central planet (GM)
 */
-int geoPotential(double et,double r,double q,double f,double *phi,void *params)
+double geoPotential(double et,double r,double q,double f,void *params)
 {
   double *ps=(double*)params;
   double mu=ps[1];
+  double phi,phic;
 
-  *phi=-mu/r;
+  //SPHERICAL COMPONENT
+  phi=-mu/r;
+  VPRINT("Spherical potential: phi = %.17e\n",phi);
   
-  return 0;
+  double cosm,Pnm,Ror,Rorn,muor,u;
+  int inm;
+  //COMPUTE HARMONIC CORRECTION
+  Ror=1.0/r;
+  muor=mu/r;
+  u=sin(f);
+  phic=0.0;  
+  VPRINT("Coordinates:\n\tr = %e, f = %e, q = %e\n\tmu/r = %e, sin(f) = %e\n",r,f,q,muor,u);
+  VPRINT("Components:\n");
+  for(int n=MAXN+1;n-->0;){
+    VPRINT("\tn = %d\n",n);
+    for(int m=0;m<=n;m++){
+      VPRINT("\t\tm = %d\n",m);
+      if(J[n][m]==0) continue;
+      cosm=cos(m*(q-Q[n][m]));
+      Pnm=gsl_sf_legendre_Plm(n,m,u);
+      Rorn=gsl_pow_int(Ror,n);
+      VPRINT("\t\t\tJnm = %e, Pnm = %e, (R/r)^n = %e, Qnm = %e, cosm = %e\n",
+	     J[n][m],Pnm,Rorn,Q[n][m],cosm);
+      phic+=muor*J[n][m]*Rorn*Pnm*cosm;
+    }
+  }
+  phi+=phic;
+
+  return phi;
 }
+
 /*
   Gradient of geopotential in spherical coordinates
 
@@ -837,21 +795,18 @@ int gradGeoPotential(double et,double r,double f,double q,double dphidy[],void *
   /*dphi/dr*/dphidy[0]=mu/(r*r);
   /*dphi/df*/dphidy[1]=0;
   /*dphi/dq*/dphidy[2]=0;
-  VPRINT("Spherical potential: %s\n",vec2strn(dphidy,3,"%.17e "));
+  VPRINT("Spherical force: %s\n",vec2strn(dphidy,3,"%.17e "));
 
   //HARMONIC EXPANSION
   double dphidyc[]={0.0,0.0,0.0};
-  double cosm,sinm,Pnm,Pnmp,Ror,Rorn,muor,u,norm;
+  double cosm,sinm,Pnm,Pnmp,Ror,Rorn,muor,norm;
+  double u=sin(f);
   int inm;
   
-  //ASSOCIATED LEGENDRE POLYNOMIAL
-  u=sin(f);
-  VPRINT("u = %.17e\n",u);
+  //ASSOCIATED LEGENDRE POLYNOMIALS
   int nmax=gsl_sf_legendre_array_n(MAXN);
   double aPnm[nmax+1],aPnmp[nmax+1];
   gsl_sf_legendre_deriv_array((gsl_sf_legendre_t)1.0,MAXN,u,aPnm,aPnmp);
-  VPRINT("Number of functions: %d\n",nmax);
-  VPRINT("Functions: %s\n",vec2strn(aPnm,nmax,"%e "));
 
   //COMPUTE HARMONIC CORRECTION
   Ror=1.0/r;
@@ -875,21 +830,29 @@ int gradGeoPotential(double et,double r,double f,double q,double dphidy[],void *
       VPRINT("\t\t\tJnm = %e, Pnm = %e, P'nm = %e, (R/r)^n = %e, Qnm = %e, cosm = %e, sinm = %e, \n",
 	     J[n][m],Pnm,Pnmp,Rorn,Q[n][m],cosm,sinm);
 
-      /*dphi/dr*/dphidyc[0]+=muor*(n+1)*J[n][m]*Rorn*Pnm*cosm;
-      /*dphi/df*/dphidyc[1]+=muor*J[n][m]*Rorn*cos(f)*Pnmp*cosm;
+      /*dphi/dr*/dphidyc[0]+=-muor/r*(n+1)*J[n][m]*Rorn*Pnm*cosm;
+      /*dphi/df*/dphidyc[1]+=+muor*J[n][m]*Rorn*cos(f)*Pnmp*cosm;
       /*dphi/dq*/dphidyc[2]+=-muor*m*J[n][m]*Rorn*Pnm*sinm;
     }
   }
   VPRINT("Harmonic correction: %s\n",vec2strn(dphidyc,3,"%.17e "));
   PAUSE();
   
-  //*
   dphidy[0]+=dphidyc[0];
-  dphidy[1]+=dphidyc[0];
-  dphidy[2]+=dphidyc[0];
-  //*/
+  dphidy[1]+=dphidyc[1];
+  dphidy[2]+=dphidyc[2];
 
   return 0;
+}
+
+double totalEnergy(double et,double x[],void *params)
+{
+  double r=x[0],f=x[1],q=x[2];
+  double dr=x[3],df=x[4],dq=x[5];
+  double K=0.5*(dr*dr+r*r*df*df+r*r*cos(f)*cos(f)*dq*dq);
+  double V=geoPotential(et,r,q,f,params);
+  double E=K+V;
+  return E;
 }
 
 /*
