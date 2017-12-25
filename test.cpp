@@ -38,7 +38,7 @@ int main(int argc,char* argv[])
 
     //INITIAL ORBITAL ELEMENTS
     double ao=ro/UL;
-    double eo=0.1;
+    double eo=0.2;
     double io=30.0*DEG;
     double Wo=30.0*DEG;
     double wo=60.0*DEG;

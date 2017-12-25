@@ -93,9 +93,10 @@ int initPropagator(void)
   gsl_rng_set(RAND,3);
 
   //INIT ZONAL AND TESSERAL HARMINICS
-  //#include<harmonics-earth.hpp>
-  #include<harmonics-ideal.hpp>
+  #include<harmonics-earth.hpp>
+  //#include<harmonics-ideal.hpp>
   //#include<harmonics-spherical.hpp>
+  //#include<harmonics-artificial.hpp>
   for(int n=MAXM+1;n-->0;){
     J[n][0]=C[n][0];
     for(int m=MAXN+1;m-->1;){
