@@ -5,10 +5,15 @@ LIBDIR=$(UTIL)/lib/$(ARCH)
 
 CFLAGS=-I. -w -I$(UTIL)/include -I$(UTIL)/include/gsl -I$(UTIL)/kernels
 LFLAGS=-lm $(LIBDIR)/cspice.a $(LIBDIR)/csupport.a $(LIBDIR)/libgsl.a $(LIBDIR)/libgslcblas.a \
-	   $(LIBDIR)/libSAT.a $(LIBDIR)/libnrlmsise.a $(LIBDIR)/libgd6.a $(LIBDIR)/libconfig.a 
+	   $(LIBDIR)/libSAT.a $(LIBDIR)/libnrlmsise.a $(LIBDIR)/libgd6.a $(LIBDIR)/libconfig++.a 
 
 show:
 	@echo "It works!"
+
+
+install:
+	make unpack
+	make -C util/external all install
 
 cleancrap:
 	@echo "Cleaning crap..."
