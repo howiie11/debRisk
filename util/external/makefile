@@ -1,9 +1,6 @@
-include ../../compiler.in
-
-PACKAGES=$(shell find . -type d)
-
-show:
-	echo $(PACKAGES)
+cleancrap:
+	@-find . -name "*~" -exec rm {} \;
+	@-find . -name "#*#" -exec rm {} \;
 
 %:
-	for dir in $(PACKAGES);do if [ $$dir != "." ];then make -C $$dir $@;fi;done
+	for dir in $(shell find . -type d);do if [ $$dir != "." ];then make -C $$dir $@;fi;done
