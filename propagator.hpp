@@ -24,6 +24,7 @@
 #include <SAT_VecMat.h>
 #include <SAT_RefSys.h>
 #include <SAT_Force.h>
+#include <libconfig.h>
 
 ////////////////////////////////////////////////////////////////////////
 //GSL
