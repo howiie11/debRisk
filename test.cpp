@@ -18,12 +18,22 @@ int main(int argc,char* argv[])
   initPropagator();
 
   //WHICH MODULE DO YOU WANT TO TEST
+  goto sat;//SATELLITE PACKAGE
   goto elem;//ELEMENTS
   goto integ_2B;//INTEGRATOR TWO-BODY PROBLEM
   goto geopot;//GEOPOTENTIAL
   goto coord;//COORDINATE TRANSFORMATION
   goto atmos;//ATMOSPHERIC MODEL
   goto integ_mas;//INTEGRATOR MAS
+
+ sat:
+  {
+    Vector x=Vector(1,0,1);
+    Vector y=Vector(2,1,3);
+    Vector z=x+y;
+    fprintf(stdout,"%e\n",z(0));
+    exit(0);
+  }
 
  elem:
   {

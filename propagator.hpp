@@ -12,6 +12,7 @@
 #include <string.h>
 #include <time.h>
 #include <stdexcept>
+#include <iostream>
 
 ////////////////////////////////////////////////////////////////////////
 //ADDITIONAL LIBRARIES
@@ -19,6 +20,10 @@
 #include <nrlmsise-00.h>
 #include <SpiceUsr.h>
 #include <eph_manager.h>
+#include <SAT_Const.h>
+#include <SAT_VecMat.h>
+#include <SAT_RefSys.h>
+#include <SAT_Force.h>
 
 ////////////////////////////////////////////////////////////////////////
 //GSL
