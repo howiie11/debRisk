@@ -40,15 +40,19 @@ int main(int argc,char* argv[])
     double CR=1.3;
     double Mjd_TT=51269.0;      // State epoch
 
-    Vector r(3);
+    Vector r(3),v(3);
     double dens;
 
     double h=1000000.0;//m
     r=Vector(1.0,0.0,0.0)*(Grav.R_ref + h);
     fprintf(stdout,"Position = %e\n",r(0));
 
+    //Model integrated with sat only compute density above 100 km
     dens=Density_HP(Mjd_TT,r);
     fprintf(stdout,"Density = %e\n",dens);
+
+    //Compute force
+    
 
     //return (0.5*CD*dens*Grav.GM/(Grav.R_ref + h)) - (P_Sol*CR);
     exit(0);

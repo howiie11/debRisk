@@ -1,12 +1,12 @@
 //------------------------------------------------------------------------------
 //
-// Exercise_3_3.cpp
+// Exercise_3_4.cpp
 // 
 // Purpose: 
 //
 //   Satellite Orbits - Models, Methods, and Applications
-//   Exercise 3-3: Accelerations
-//   
+//   Exercise 3-4: Orbit Perturbations
+//
 // Notes:
 //
 //   This software is protected by national and international copyright. 
@@ -20,141 +20,200 @@
 //
 // Last modified:
 //
-//   2000/03/04  EGO  Final version (1st edition)
+//   2000/03/04  OMO  Final version (1st edition)
 //   2005/04/14  OMO  Final version (2nd reprint)
 //
 // (c) 1999-2005  O. Montenbruck, E. Gill
 //
 //------------------------------------------------------------------------------
-#define VERBOSE 0
 
-#include <cmath>
 #include <iostream>
 #include <iomanip>
-#include <cstdio>
+#include <cmath>
 
 #include "GNU_iomanip.h"
 
 #include "SAT_Const.h"
+#include "SAT_DE.h"
+#include "SAT_Kepler.h"
 #include "SAT_Force.h"
+#include "SAT_RefSys.h"
+#include "SAT_Time.h"
 #include "SAT_VecMat.h"
 
 using namespace std;
 
-// Pegasus function prototype: double f(double x);
-typedef double (*PegasusFunct) (double x);
+//------------------------------------------------------------------------------
+//
+// Global types and data
+//
+//------------------------------------------------------------------------------
+
+
+// Record for passing global data between Deriv and the calling program 
+
+struct AuxParam {
+  double  Mjd0_TT;
+  double  Area,mass,CR,CD;
+  int     n,m;
+  bool    Sun,Moon,SRad,Drag;
+};
+
 
 
 //------------------------------------------------------------------------------
-// A_Diff: Function computes the difference of acceleration due to SRP and DRG
-//   h         Height [m]
-//   <return>  Difference of acceleration
+//
+// Accel
+//
+// Purpose:
+//
+//   Computes the acceleration of an Earth orbiting satellite due to 
+//    - the Earth's harmonic gravity field, 
+//    - the gravitational perturbations of the Sun and Moon
+//    - the solar radiation pressure and
+//    - the atmospheric drag
+//
+// Input/Output:
+//
+//   Mjd_TT      Terrestrial Time (Modified Julian Date)
+//   r           Satellite position vector in the ICRF/EME2000 system
+//   v           Satellite velocity vector in the ICRF/EME2000 system
+//   Area        Cross-section 
+//   mass        Spacecraft mass
+//   CR          Radiation pressure coefficient
+//   CD          Drag coefficient
+//   <return>    Acceleration (a=d^2r/dt^2) in the ICRF/EME2000 system
+//
 //------------------------------------------------------------------------------
-double A_Diff (double h)
+
+Vector Accel ( double Mjd_TT, const Vector& r, const Vector& v, 
+               double Area, double mass, double CR, double CD,
+               int n, int m, 
+               bool FlagSun, bool FlagMoon, bool FlagSRad, bool FlagDrag )
 {
-  double CD     =     2.3;      // Spacecraft parameters
-  double CR     =     1.3;
-  double Mjd_TT = 51269.0;      // State epoch
 
-  Vector r(3);
-  double dens;
+  double Mjd_UT1;
+  Vector a(3), r_Sun(3), r_Moon(3);
+  Matrix T(3,3), E(3,3);
 
-  r = Vector (1.0, 0.0, 0.0 ) * (Grav.R_ref + h);
-  if(VERBOSE) fprintf(stdout,"Calling densisty at = (%e, %e, %e)\n",r(0),r(1),r(1));
-  dens = Density_HP (Mjd_TT,r);
-  if(VERBOSE) fprintf(stdout,"Density = %e\n",dens);
+  // Acceleration due to harmonic gravity field
 
-  return (0.5*CD*dens*Grav.GM/(Grav.R_ref + h)) - (P_Sol*CR);
+  Mjd_UT1 = Mjd_TT + (IERS::UT1_UTC(Mjd_TT)-IERS::TT_UTC(Mjd_TT))/86400.0;
+
+  T = NutMatrix(Mjd_TT) * PrecMatrix(MJD_J2000,Mjd_TT);
+  E = GHAMatrix(Mjd_UT1) * T;
+
+  a = AccelHarmonic ( r,E, Grav.GM,Grav.R_ref,Grav.CS, n,m );
+
+  // Luni-solar perturbations 
+
+  r_Sun  = Sun(Mjd_TT);
+  r_Moon = Moon(Mjd_TT);
+
+  if (FlagSun)  a += AccelPointMass ( r, r_Sun,  GM_Sun  ); 
+  if (FlagMoon) a += AccelPointMass ( r, r_Moon, GM_Moon ); 
+
+  // Solar radiation pressure
+
+  if (FlagSRad) a += AccelSolrad ( r, r_Sun, Area, mass, CR, P_Sol, AU );
+
+  // Atmospheric drag
+
+  if (FlagDrag) a += AccelDrag ( Mjd_TT, r, v, T, Area, mass, CD );
+
+  // Acceleration
+  
+  return a;
+
 }
 
 
 //------------------------------------------------------------------------------
 //
-// Pegasus: Root finder using the Pegasus method
+// Deriv
 //
-// Input:
+// Purpose:
+// 
+//   Computes the derivative of the state vector 
 //
-//   PegasusFunct  Pointer to the function to be examined
+// Note:
 //
-//   LowerBound    Lower bound of search interval
-//   UpperBound    Upper bound of search interval
-//   Accuracy      Desired accuracy for the root
-//
-// Output:
-//
-//   Root          Root found (valid only if Success is true)
-//   Success       Flag indicating success of the routine
-//
-// References:                                                               
-//
-//   Dowell M., Jarratt P., 'A modified Regula Falsi Method for Computing    
-//     the root of an equation', BIT 11, p.168-174 (1971).                   
-//   Dowell M., Jarratt P., 'The "PEGASUS Method for Computing the root      
-//     of an equation', BIT 12, p.503-508 (1972).                            
-//   Engeln-Muellges G., Reutter F., 'Formelsammlung zur Numerischen           
-//     Mathematik mit FORTRAN77-Programmen', Bibliogr. Institut,             
-//     Zuerich (1986).                                                       
-//
-// Notes:
-//
-//   Pegasus assumes that the root to be found is bracketed in the interval
-//   [LowerBound, UpperBound]. Ordinates for these abscissae must therefore
-//   have different signs.
+//   pAux is expected to point to a variable of type AuxDataRecord, which is
+//   used to communicate with the other program sections and to hold data 
+//   between subsequent calls of this function
 //
 //------------------------------------------------------------------------------
-void Pegasus ( PegasusFunct f,
-               double LowerBound, double UpperBound, double  Accuracy,
-               double& Root, bool& Success )
+
+void Deriv ( double t, const Vector& y, Vector& yp, void* pAux )
 {
-  //
-  // Constants
-  //
-  const int MaxIterat = 30; 
 
-  //
-  // Variables
-  //
-  double x1 = LowerBound; double f1 = f(x1);
-  double x2 = UpperBound; double f2 = f(x2);
-  double x3 = 0.0;        double f3 = 0.0;
+  // Pointer to auxiliary data record
   
-  int Iterat = 0; 
+  AuxParam* p = static_cast<AuxParam*>(pAux);
 
+  // Time
 
-  // Initialization
-  Success = false;
-  Root    = x1;
+  double  Mjd_TT = (*p).Mjd0_TT + t/86400.0;
 
+  // State vector components
+
+  Vector r = y.slice(0,2);
+  Vector v = y.slice(3,5);
+
+  // Acceleration 
+
+  Vector a(3);
+
+  a = Accel ( Mjd_TT,r,v, (*p).Area, (*p).mass, (*p).CR, (*p).CD,
+              (*p).n, (*p).m, (*p).Sun, (*p).Moon, (*p).SRad, (*p).Drag );
+
+  // State vector derivative
   
-  // Iteration
-  if ( f1 * f2 < 0.0 )
-    do 
-    {
-      // Approximation of the root by interpolation
-      x3 = x2 - f2/( (f2-f1)/(x2-x1) ); f3 = f(x3);
+  yp = Stack ( v, a );
+   
+};
 
-      // Replace (x1,f2) and (x2,f2) by new values, such that
-      // the root is again within the interval [x1,x2]
-      if ( f3 * f2 <= 0.0 ) {
-        // Root in [x2,x3]
-        x1 = x2; f1 = f2; // Replace (x1,f1) by (x2,f2)
-        x2 = x3; f2 = f3; // Replace (x2,f2) by (x3,f3)
-      }
-      else {
-        // Root in [x1,x3]
-        f1 = f1 * f2/(f2+f3); // Replace (x1,f1) by (x1,f1')
-        x2 = x3; f2 = f3;     // Replace (x2,f2) by (x3,f3)
-      }
 
-      if (fabs(f1) < fabs(f2))
-        Root = x1;
-      else
-        Root = x2;
+//------------------------------------------------------------------------------
+//
+// Ephemeris computation
+//
+//------------------------------------------------------------------------------
 
-      Success = (fabs(x2-x1) <= Accuracy);
-      Iterat++;
-    }
-    while ( !Success && (Iterat<MaxIterat) );
+void Ephemeris ( const Vector& Y0, int N_Step, double Step, AuxParam p, 
+                 Vector Eph[] )
+
+{
+
+  int       i;
+  double    t,t_end;
+  double    relerr,abserr;        // Accuracy requirements
+  DE        Orb(Deriv,6,&p);      // Object for integrating the eq. of motion
+  Vector    Y(6);
+
+  relerr = 1.0e-13;
+  abserr = 1.0e-6;
+  t      = 0.0;
+  Y      = Y0;
+  Orb.Init(t,relerr,abserr);
+  for (i=0;i<=N_Step;i++) {
+    t_end = Step*i;  
+    Orb.Integ ( t_end, Y);
+    Eph[i] = Y;
+  };
+
+
+}
+
+//------------------------------------------------------------------------------
+//
+// Maximum computation
+//
+//------------------------------------------------------------------------------
+
+template<class T> const T& Max (const T& a, const T& b)
+{
+    return (a<b) ? b:a;
 }
 
 
@@ -165,60 +224,275 @@ void Pegasus ( PegasusFunct f,
 //------------------------------------------------------------------------------
 
 int main() {
- 
-  const double r_Moon = 384400.0e+03; // Geocentric Moon distance [m]
-  const double J20_norm =  4.841e-04; // Normalized geopotential coefficients
-  const double J22_norm =  2.812e-06;
 
-  const double h1  =  150.0e+3;       // Start of interval [m]
-  const double h2  = 2000.0e+3;       // Stop of interval [m]
-  const double eps =  100.0;          // Accuracy [m]  
+  // Constants
 
-  bool Success = false;
-
-  double r5,r,h;
-
-
-  cout << "Exercise 3-3: Accelerations " << endl << endl;
-
-  // Balance of accelerations due to drag and solar radiation pressure
-
-  Pegasus(A_Diff, h1, h2, eps, h, Success);
+  const int N_Step = 720;   // Maximum number of steps
   
-  cout << " a_DRG > a_SRP  for " << setprecision(0) << fixed << setw(6) 
-       << h/1000.0 << " km" << endl;
+  // Variables
 
-  // Balance of accelerations due to J22 and Moon
-
-  r5 = 3.0/2.0 * Grav.GM/GM_Moon * pow(Grav.R_ref,2) * pow(r_Moon,3) * J22_norm;
-  r = pow(r5,0.2);
+  int       i;
+  int       N_Step1;
+  int       N_Step2;
+  double    Step;
+  double    Mjd0_UTC;
+  Vector    Y0(6);
+  Vector    Kep(6);
+  AuxParam  Aux_ref,Aux;              // Auxiliary parameters
+  double    Max_J20,Max_J22,Max_J44,Max_J1010;
+  double    Max_Sun,Max_Moon,Max_SRad,Max_Drag;
+  Vector    Eph_Ref  [N_Step+1];
+  Vector    Eph_J20  [N_Step+1];
+  Vector    Eph_J22  [N_Step+1];
+  Vector    Eph_J44  [N_Step+1];
+  Vector    Eph_J1010[N_Step+1];
+  Vector    Eph_Sun  [N_Step+1];
+  Vector    Eph_Moon [N_Step+1];
+  Vector    Eph_SRad [N_Step+1];
+  Vector    Eph_Drag [N_Step+1];
   
-  cout << " a_J22 > a_Moon for " << setprecision(0) << fixed << setw(6) 
-       << (r - Grav.R_ref)/1000.0 << " km" << endl;
 
-  // Balance of accelerations due to J22 and Sun
+  // Initialize UT1-UTC and UTC-TAI time difference
 
-  r5 = 3.0/2.0 * Grav.GM/GM_Sun * pow(Grav.R_ref,2) * pow(AU,3) * J22_norm;
-  r = pow(r5,0.2);
+  IERS::Set ( -0.05,-30.00, 0.0, 0.0 ); 
 
-  cout << " a_J22 > a_Sun  for " << setprecision(0) << fixed << setw(6) 
-       << (r - Grav.R_ref)/1000.0 << " km" << endl;
-
-  // Balance of accelerations due to J20 and Moon
-
-  r5 = 3.0/2.0 * Grav.GM/GM_Moon * pow(Grav.R_ref,2) * pow(r_Moon,3) * J20_norm;
-  r = pow(r5,0.2);
   
-  cout << " a_J20 > a_Moon for " << setprecision(0) << fixed << setw(6) 
-       << (r - Grav.R_ref)/1000.0 << " km" << endl;
+  // Epoch state (remote sensing satellite)
 
-  // Balance of accelerations due to J20 and Sun
+  Mjd0_UTC = Mjd(1999,03,01,00,00,0.0);
+  Kep = Vector ( 7178.0e3, 0.0010, 98.57*Rad, 0.0, 0.0, 0.0 ); 
+  Y0 = State ( GM_Earth, Kep, 0.0 );
 
-  r5 = 3.0/2.0 * Grav.GM/GM_Sun * pow(Grav.R_ref,2) * pow(AU,3) * J20_norm;
-  r = pow(r5,0.2);
+  // Model parameters
 
-  cout << " a_J20 > a_Sun  for " << setprecision(0) << fixed << setw(6) 
-       << (r - Grav.R_ref)/1000.0 << " km" << endl;
+  Aux_ref.Mjd0_TT = Mjd0_UTC + IERS::TT_UTC(Mjd0_UTC)/86400.0;
+  Aux_ref.Area    = 5.0;     // [m^2]  Remote sensing satellite
+  Aux_ref.mass    = 1000.0;  // [kg]
+  Aux_ref.CR      = 1.3;     
+  Aux_ref.CD      = 2.3;
+  Aux_ref.n       = 20;
+  Aux_ref.m       = 20;
+  Aux_ref.Sun     = true;
+  Aux_ref.Moon    = true;
+  Aux_ref.SRad    = true;
+  Aux_ref.Drag    = true;
+
+  // Reference orbit
+
+  Step    =  120.0; // [s]
+  N_Step1 =     50; // 100 mins
+  N_Step2 =    720; // 1 day
+
+  Aux = Aux_ref; 
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_Ref );
+  
+  // J2,0 perturbations
+  Aux.n = 2; Aux.m = 0;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_J20 );
+
+  // J2,2 perturbations
+  Aux.n = 2; Aux.m = 2;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_J22 );
+
+  // J4,4 perturbations
+  Aux.n = 4; Aux.m = 4;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_J44 );
+
+  // J10,10 perturbations
+  Aux.n = 10; Aux.m = 10;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_J1010 );
+  Aux.n = 20; Aux.m = 20;
+
+  // Solar perturbations
+  Aux.Sun = false;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_Sun );
+  Aux.Sun = true;
+
+  // Lunar perturbations
+  Aux.Moon = false;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_Moon );
+  Aux.Moon = true;
+
+  // Solar radiation pressure perturbations
+  Aux.SRad = false;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_SRad );
+  Aux.SRad = true;
+
+  // Drag perturbations
+  Aux.Drag = false;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_Drag );
+  Aux.Drag = true;
+
+  // Find maximum over N_Step1 steps
+
+  Max_J20=Max_J22=Max_J44=Max_J1010=Max_Sun=Max_Moon=Max_SRad=Max_Drag = 0.0;
+  for (i=0;i<=N_Step1;i++) {
+    Max_J20   = Max(Norm (Eph_J20  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J20);
+    Max_J22   = Max(Norm (Eph_J22  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J22);
+    Max_J44   = Max(Norm (Eph_J44  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J44);
+    Max_J1010 = Max(Norm (Eph_J1010[i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J1010);
+    Max_Sun   = Max(Norm (Eph_Sun  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Sun);
+    Max_Moon  = Max(Norm (Eph_Moon [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Moon);
+    Max_SRad  = Max(Norm (Eph_SRad [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_SRad);
+    Max_Drag  = Max(Norm (Eph_Drag [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Drag);
+  };
+
+  // Output
+  
+  cout << "Exercise 3-4: Orbit Perturbations " << endl << endl;
+
+  cout << "Remote sensing satellite: " << endl << endl;
+  
+  cout << "  Maximum position errors within "
+       << fixed << setprecision(1)
+       << setw(5) << N_Step1*Step/60.0 
+       << " min propagation interval " << endl << endl;
+  cout << "    J2,0    J2,2    J4,4  J10,10" 
+       << "     Sun    Moon  SolRad    Drag" << endl
+       << "     [m]     [m]     [m]     [m]"
+       << "     [m]     [m]     [m]     [m]" << endl;
+  cout << setw(8) << Max_J20   << setw(8) << Max_J22  << setw(8) << Max_J44
+       << setw(8) << Max_J1010 << setw(8) << Max_Sun  << setw(8) << Max_Moon
+       << setw(8) << Max_SRad  << setw(8) << Max_Drag << endl << endl;
+
+  // Find maximum over N_Step2 steps
+
+  for (i=N_Step1+1;i<=N_Step2;i++) {
+    Max_J20   = Max(Norm (Eph_J20  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J20);
+    Max_J22   = Max(Norm (Eph_J22  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J22);
+    Max_J44   = Max(Norm (Eph_J44  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J44);
+    Max_J1010 = Max(Norm (Eph_J1010[i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J1010);
+    Max_Sun   = Max(Norm (Eph_Sun  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Sun);
+    Max_Moon  = Max(Norm (Eph_Moon [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Moon);
+    Max_SRad  = Max(Norm (Eph_SRad [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_SRad);
+    Max_Drag  = Max(Norm (Eph_Drag [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Drag);
+  };
+
+  // Output
+
+  cout << "  Maximum position errors within "
+       << setw(5) << N_Step2*Step/60.0 
+       << " min propagation interval " << endl << endl;
+  cout << "    J2,0    J2,2    J4,4  J10,10" 
+       << "     Sun    Moon  SolRad    Drag" << endl
+       << "     [m]     [m]     [m]     [m]"
+       << "     [m]     [m]     [m]     [m]" << endl;
+  cout << setw(8) << Max_J20   << setw(8) << Max_J22  << setw(8) << Max_J44
+       << setw(8) << Max_J1010 << setw(8) << Max_Sun  << setw(8) << Max_Moon
+       << setw(8) << Max_SRad  << setw(8) << Max_Drag << endl << endl;
+
+
+
+  // Epoch state (geostationary satellite)
+
+  Kep = Vector (42166.0e3, 0.0004,  0.02*Rad, 0.0, 0.0, 0.0 );
+  Y0 = State ( GM_Earth, Kep, 0.0 );
+
+  // Model parameters
+
+  Aux_ref.Area    = 10.0;    // [m^2]  Geostationary satellite
+
+  // Reference orbit
+
+  Step    = 1200.0; // [s]
+  N_Step1 =     72; // 1 day
+  N_Step2 =    144; // 2 days 
+
+  Aux = Aux_ref; 
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_Ref );
+  
+  // J2,0 perturbations
+  Aux.n = 2; Aux.m = 0;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_J20 );
+
+  // J2,2 perturbations
+  Aux.n = 2; Aux.m = 2;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_J22 );
+
+  // J4,4 perturbations
+  Aux.n = 4; Aux.m = 4;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_J44 );
+
+  // J10,10 perturbations
+  Aux.n = 10; Aux.m = 10;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_J1010 );
+  Aux.n = 20; Aux.m = 20;
+
+  // Solar perturbations
+  Aux.Sun = false;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_Sun );
+  Aux.Sun = true;
+
+  // Lunar perturbations
+  Aux.Moon = false;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_Moon );
+  Aux.Moon = true;
+
+  // Solar radiation pressure perturbations
+  Aux.SRad = false;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_SRad );
+  Aux.SRad = true;
+
+  // Drag perturbations
+  Aux.Drag = false;
+  Ephemeris ( Y0, N_Step2, Step, Aux, Eph_Drag );
+  Aux.Drag = true;
+
+  // Find maximum over N_Step1 steps
+
+  Max_J20=Max_J22=Max_J44=Max_J1010=Max_Sun=Max_Moon=Max_SRad=Max_Drag = 0.0;
+  for (i=0;i<=N_Step1;i++) {
+    Max_J20   = Max(Norm (Eph_J20  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J20);
+    Max_J22   = Max(Norm (Eph_J22  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J22);
+    Max_J44   = Max(Norm (Eph_J44  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J44);
+    Max_J1010 = Max(Norm (Eph_J1010[i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J1010);
+    Max_Sun   = Max(Norm (Eph_Sun  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Sun);
+    Max_Moon  = Max(Norm (Eph_Moon [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Moon);
+    Max_SRad  = Max(Norm (Eph_SRad [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_SRad);
+    Max_Drag  = Max(Norm (Eph_Drag [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Drag);
+  };
+
+  // Output
+  
+  cout << "Geostationary satellite: " << endl << endl;
+  
+  cout << "  Maximum position errors within "
+       << fixed << setprecision(1)
+       << setw(5) << N_Step1*Step/60.0 
+       << " min propagation interval " << endl << endl;
+  cout << "    J2,0    J2,2    J4,4  J10,10" 
+       << "     Sun    Moon  SolRad    Drag" << endl
+       << "     [m]     [m]     [m]     [m]"
+       << "     [m]     [m]     [m]     [m]" << endl;
+  cout << setw(8) << Max_J20   << setw(8) << Max_J22  << setw(8) << Max_J44
+       << setw(8) << Max_J1010 << setw(8) << Max_Sun  << setw(8) << Max_Moon
+       << setw(8) << Max_SRad  << setw(8) << Max_Drag << endl << endl;
+
+  // Find maximum over N_Step2 steps
+
+  for (i=N_Step1+1;i<=N_Step2;i++) {
+    Max_J20   = Max(Norm (Eph_J20  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J20);
+    Max_J22   = Max(Norm (Eph_J22  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J22);
+    Max_J44   = Max(Norm (Eph_J44  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J44);
+    Max_J1010 = Max(Norm (Eph_J1010[i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_J1010);
+    Max_Sun   = Max(Norm (Eph_Sun  [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Sun);
+    Max_Moon  = Max(Norm (Eph_Moon [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Moon);
+    Max_SRad  = Max(Norm (Eph_SRad [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_SRad);
+    Max_Drag  = Max(Norm (Eph_Drag [i].slice(0,2)-Eph_Ref[i].slice(0,2)), Max_Drag);
+  };
+
+  // Output
+
+  cout << "  Maximum position errors within "
+       << setw(5) << N_Step2*Step/60.0 
+       << " min propagation interval " << endl << endl;
+  cout << "    J2,0    J2,2    J4,4  J10,10" 
+       << "     Sun    Moon  SolRad    Drag" << endl
+       << "     [m]     [m]     [m]     [m]"
+       << "     [m]     [m]     [m]     [m]" << endl;
+  cout << setw(8) << Max_J20   << setw(8) << Max_J22  << setw(8) << Max_J44
+       << setw(8) << Max_J1010 << setw(8) << Max_Sun  << setw(8) << Max_Moon
+       << setw(8) << Max_SRad  << setw(8) << Max_Drag << endl << endl;
 
   return 0;
 
