@@ -51,8 +51,9 @@ int main(int argc,char* argv[])
     dens=Density_HP(Mjd_TT,r);
     fprintf(stdout,"Density = %e\n",dens);
 
-    //Compute force
-    
+    //Compute acceleration
+    Mjd0_UTC = Mjd(1999,03,01,00,00,0.0);
+    Mjd0_TT = Mjd0_UTC + IERS::TT_UTC(Mjd0_UTC)/86400.0;
 
     //return (0.5*CD*dens*Grav.GM/(Grav.R_ref + h)) - (P_Sol*CR);
     exit(0);

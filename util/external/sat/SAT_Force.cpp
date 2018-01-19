@@ -859,6 +859,7 @@ Vector AccelMain ( double Mjd_TT, const Vector& r, const Vector& v,
 //   mass        Spacecraft mass
 //   CR          Radiation pressure coefficient
 //   CD          Drag coefficient
+//   n, m        Maximum degree and maximum order (m_max<=n_max; m_max=0 for zonals, only)
 //   bool FlagSun, bool FlagMoon, bool FlagSRad, bool FlagDrag
 //               Turn on the effect of each perturber
 //   <return>    Acceleration (a=d^2r/dt^2) in the ICRF/EME2000 system
