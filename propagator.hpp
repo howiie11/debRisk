@@ -689,11 +689,18 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
  *        SUBROUTINE GTD7D -- d[5] is the "effective total mass density
  *        for drag" and is the sum of the mass densities of all species
  *        in this model, INCLUDING anomalous oxygen.
-  
+ 
+ NOTE ZULUAGA: F10.7 and ap index available at
+ https://omniweb.gsfc.nasa.gov/form/dx1.html
   
  */
-#define KAP_REF {150,22,22,22,22,22,22,22}
+
+//DEFAULT VALUES FOR ALTITUDES BELOW 80 KM
+#define KAP_REF {150.0,150.0,4.0,4.0,4.0,4.0,4.0,4.0,4.0}
+
+//REFRENCE FLAGS
 #define FLAGS_ALL {1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
+
 int NRLMSISE(int day,double sec,
 	     double alt,double glat,double glon,
 	     double KAP[],
@@ -720,7 +727,7 @@ int NRLMSISE(int day,double sec,
   input.lst=sec/3600.0+glon/15.0;
   input.f107A=KAP[0];
   input.f107=KAP[1];
-  input.ap=40.0;
+  input.ap=KAP[2];
 
   gtd7(&input,&flags,&output);  
 

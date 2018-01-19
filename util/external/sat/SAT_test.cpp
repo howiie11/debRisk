@@ -26,10 +26,12 @@
 // (c) 1999-2005  O. Montenbruck, E. Gill
 //
 //------------------------------------------------------------------------------
+#define VERBOSE 0
 
 #include <cmath>
 #include <iostream>
 #include <iomanip>
+#include <cstdio>
 
 #include "GNU_iomanip.h"
 
@@ -58,7 +60,9 @@ double A_Diff (double h)
   double dens;
 
   r = Vector (1.0, 0.0, 0.0 ) * (Grav.R_ref + h);
+  if(VERBOSE) fprintf(stdout,"Calling densisty at = (%e, %e, %e)\n",r(0),r(1),r(1));
   dens = Density_HP (Mjd_TT,r);
+  if(VERBOSE) fprintf(stdout,"Density = %e\n",dens);
 
   return (0.5*CD*dens*Grav.GM/(Grav.R_ref + h)) - (P_Sol*CR);
 }

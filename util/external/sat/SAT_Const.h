@@ -28,7 +28,7 @@
 
 #ifndef INC_SAT_CONST_H
 #define INC_SAT_CONST_H
-
+#include <cstdio>
 
 //
 // Mathematical constants

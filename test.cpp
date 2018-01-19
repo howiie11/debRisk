@@ -5,7 +5,6 @@ using namespace std;
   Rate of variation of longitude of the nodes and periapse argument:
   http://www.braeunig.us/space/orbmech.htm
   http://www.braeunig.us/space/atmos.htm
-
  */
 
 int main(int argc,char* argv[])
@@ -17,21 +16,41 @@ int main(int argc,char* argv[])
   //INITIALIZE PROPAGATOR
   initPropagator();
 
-  //WHICH MODULE DO YOU WANT TO TEST
+  //VVVV--- PUT HERE THE MODULE YOU WANT TO TEST
   goto sat;//SATELLITE PACKAGE
+  
+  //THIS LINES WILL NOT BE EXECUTED
+  goto atmos;//ATMOSPHERIC MODEL
   goto elem;//ELEMENTS
   goto integ_2B;//INTEGRATOR TWO-BODY PROBLEM
   goto geopot;//GEOPOTENTIAL
   goto coord;//COORDINATE TRANSFORMATION
-  goto atmos;//ATMOSPHERIC MODEL
   goto integ_mas;//INTEGRATOR MAS
 
  sat:
   {
+    //Testing the vector components
     Vector x=Vector(1,0,1);
     Vector y=Vector(2,1,3);
     Vector z=x+y;
     fprintf(stdout,"%e\n",z(0));
+    
+    //Calculating the acceleration
+    double CD=2.3;      // Spacecraft parameters
+    double CR=1.3;
+    double Mjd_TT=51269.0;      // State epoch
+
+    Vector r(3);
+    double dens;
+
+    double h=1000000.0;//m
+    r=Vector(1.0,0.0,0.0)*(Grav.R_ref + h);
+    fprintf(stdout,"Position = %e\n",r(0));
+
+    dens=Density_HP(Mjd_TT,r);
+    fprintf(stdout,"Density = %e\n",dens);
+
+    //return (0.5*CD*dens*Grav.GM/(Grav.R_ref + h)) - (P_Sol*CR);
     exit(0);
   }
 
@@ -213,14 +232,17 @@ int main(int argc,char* argv[])
     int iyd=00001;
     double sec=0.0,alt=1.4,lat=+36.2,lon=-75.34;
 
-    /*Altitude*/xo=0.0;xe=100.0;qx=3;
+    //THESE LINES DOES NOT HAVE ANY EFFECT
     /*Latitude*/xo=0.0;xe=90.0;qx=4;
     /*Longitude*/xo=0.0;xe=180.0;qx=5;
     /*Day of year*/xo=1.0;xe=120.0;qx=1;
-
     /*Second of the day*/xo=0.0;xe=86400;qx=2;
-    fprintf(f,"%-25s %-25s %-25s %-25s %-25s\n",
-	    "#1:x","2:rho(90)","3:T(90)","4:rho(00)","5:T(00)");
+
+    //VVVV--- PUT HERE THE VARIABLE YOU WANT TO TEST
+    /*Altitude*/xo=0.0;xe=1000.0;qx=3;
+
+    fprintf(f,"%-25s %-25s %-25s\n",
+	    "#1:x","2:rho(90)","3:T(90)");
     for(i=0;i<n;i++){
       x=xo+i*(xe-xo)/n;
       iyd=qx==1?(int)x:iyd;

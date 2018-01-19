@@ -23,10 +23,13 @@
 //   2005/04/14  OMO  Final version (2nd reprint)
 //
 // (c) 1999-2005  O. Montenbruck, E. Gill
+// 
+// Modified by Jorge I. Zuluaga et al. (2018)
 //
 //------------------------------------------------------------------------------
 
 #define SAT_FORCE_CPP
+#define VERBOSE 0
 
 #include <cmath>
 
@@ -610,6 +613,22 @@ Vector AccelDrag ( double Mjd_TT, const Vector& r, const Vector& v,
   
 }
 
+//------------------------------------------------------------------------------
+//
+// Density_HP
+//
+// Purpose:
+//
+//   Computes the atmospheric density for the NMRISE
+//
+// Input/Output:
+//
+//   Mjd_TT      Terrestrial Time (Modified Julian Date)
+//   r_tod       Satellite position vector in the inertial system [m]
+//   <return>    Density [kg/m^3]
+//
+//------------------------------------------------------------------------------
+
 
 //------------------------------------------------------------------------------
 //
@@ -639,7 +658,6 @@ double Density_HP ( double Mjd_TT, const Vector& r_tod )
 
   // Harris-Priester atmospheric density model parameters 
   // Height [km], minimum density, maximum density [gm/km^3]
-
   const int    N_Coef = 50;
   const double Data_h[N_Coef]= {
       100.0, 120.0, 130.0, 140.0, 150.0, 160.0, 170.0, 180.0, 190.0, 200.0,     
@@ -692,7 +710,13 @@ double Density_HP ( double Mjd_TT, const Vector& r_tod )
   // Exit with zero density outside height model limits
 
   if ( height >= upper_limit || height <= lower_limit ) 
-  {  return 0.0;
+  { 
+    if(VERBOSE){
+      fprintf(stdout,"Upper limit reached: %d\n",height >= upper_limit);
+      if(height>=upper_limit) fprintf(stdout,"Upper limit reached: h = %e (>%e)\n",height,upper_limit);
+      else fprintf(stdout,"Lower limit reached: h = %e (<%e)\n",height,lower_limit);
+    }
+    return 0.0;
   }
 
 
@@ -739,9 +763,11 @@ double Density_HP ( double Mjd_TT, const Vector& r_tod )
   // Density computation
 
   density = d_min + (d_max-d_min)*pow(c_psi2,n_prm);
+  density*= 1.0e-12;
 
-
-  return density * 1.0e-12;       // [kg/m^3]
+  if(VERBOSE) fprintf(stdout,"h = %e, density = %e\n",height,density);
+  
+  return density;       // [kg/m^3]
                        
 }
 
