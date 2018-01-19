@@ -837,3 +837,72 @@ Vector AccelMain ( double Mjd_TT, const Vector& r, const Vector& v,
 
 }
 
+//Zuluaga et al. (2018)
+//------------------------------------------------------------------------------
+//
+// Accel
+//
+// Purpose:
+//
+//   Computes the acceleration of an Earth orbiting satellite due to 
+//    - the Earth's harmonic gravity field, 
+//    - the gravitational perturbations of the Sun and Moon
+//    - the solar radiation pressure and
+//    - the atmospheric drag
+//
+// Input/Output:
+//
+//   Mjd_TT      Terrestrial Time (Modified Julian Date)
+//   r           Satellite position vector in the ICRF/EME2000 system
+//   v           Satellite velocity vector in the ICRF/EME2000 system
+//   Area        Cross-section 
+//   mass        Spacecraft mass
+//   CR          Radiation pressure coefficient
+//   CD          Drag coefficient
+//   bool FlagSun, bool FlagMoon, bool FlagSRad, bool FlagDrag
+//               Turn on the effect of each perturber
+//   <return>    Acceleration (a=d^2r/dt^2) in the ICRF/EME2000 system
+//
+//
+//------------------------------------------------------------------------------
+
+Vector Accel ( double Mjd_TT, const Vector& r, const Vector& v, 
+               double Area, double mass, double CR, double CD,
+               int n, int m, 
+               bool FlagSun, bool FlagMoon, bool FlagSRad, bool FlagDrag )
+{
+
+  double Mjd_UT1;
+  Vector a(3), r_Sun(3), r_Moon(3);
+  Matrix T(3,3), E(3,3);
+
+  // Acceleration due to harmonic gravity field
+
+  Mjd_UT1 = Mjd_TT + (IERS::UT1_UTC(Mjd_TT)-IERS::TT_UTC(Mjd_TT))/86400.0;
+
+  T = NutMatrix(Mjd_TT) * PrecMatrix(MJD_J2000,Mjd_TT);
+  E = GHAMatrix(Mjd_UT1) * T;
+
+  a = AccelHarmonic ( r,E, Grav.GM,Grav.R_ref,Grav.CS, n,m );
+
+  // Luni-solar perturbations 
+
+  r_Sun  = Sun(Mjd_TT);
+  r_Moon = Moon(Mjd_TT);
+
+  if (FlagSun)  a += AccelPointMass ( r, r_Sun,  GM_Sun  ); 
+  if (FlagMoon) a += AccelPointMass ( r, r_Moon, GM_Moon ); 
+
+  // Solar radiation pressure
+
+  if (FlagSRad) a += AccelSolrad ( r, r_Sun, Area, mass, CR, P_Sol, AU );
+
+  // Atmospheric drag
+
+  if (FlagDrag) a += AccelDrag ( Mjd_TT, r, v, T, Area, mass, CD );
+
+  // Acceleration
+  
+  return a;
+
+}

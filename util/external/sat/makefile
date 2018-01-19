@@ -1,13 +1,13 @@
 include ../../../compiler.in 
 
 CC=g++
-CXXFLAGS += -Wall -O3 -I.
+CXXFLAGS += -Wall -O3 -I. -w
 
 LIBDIR=../../lib/$(ARCH)/
 INCDIR=../../include
 
 LIB=libSAT.a
-LIBOBJS=SAT_Force.o SAT_RefSys.o SAT_VecMat.o
+LIBOBJS=SAT_Force.o SAT_RefSys.o SAT_VecMat.o SAT_DE.o SAT_Kepler.o SAT_Time.o
 HFILES=$(shell ls *.h)
 
 $(LIB): $(LIBOBJS)

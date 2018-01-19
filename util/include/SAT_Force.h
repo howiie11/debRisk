@@ -278,6 +278,39 @@ double Density_HP ( double Mjd_TT, const Vector& r_tod );
 Vector AccelMain ( double Mjd_TT, const Vector& r, const Vector& v, 
                    double Area, double mass, double CR, double CD );
 
+//Zuluaga et al. (2018)
+//------------------------------------------------------------------------------
+//
+// Accel
+//
+// Purpose:
+//
+//   Computes the acceleration of an Earth orbiting satellite due to 
+//    - the Earth's harmonic gravity field, 
+//    - the gravitational perturbations of the Sun and Moon
+//    - the solar radiation pressure and
+//    - the atmospheric drag
+//
+// Input/Output:
+//
+//   Mjd_TT      Terrestrial Time (Modified Julian Date)
+//   r           Satellite position vector in the ICRF/EME2000 system
+//   v           Satellite velocity vector in the ICRF/EME2000 system
+//   Area        Cross-section 
+//   mass        Spacecraft mass
+//   CR          Radiation pressure coefficient
+//   CD          Drag coefficient
+//   bool FlagSun, bool FlagMoon, bool FlagSRad, bool FlagDrag
+//               Turn on the effect of each perturber
+//   <return>    Acceleration (a=d^2r/dt^2) in the ICRF/EME2000 system
+//
+//
+//------------------------------------------------------------------------------
+
+Vector Accel ( double Mjd_TT, const Vector& r, const Vector& v, 
+               double Area, double mass, double CR, double CD,
+               int n, int m, 
+               bool FlagSun, bool FlagMoon, bool FlagSRad, bool FlagDrag );
 
 #endif  // include blocker
 
