@@ -1,7 +1,7 @@
 ////////////////////////////////////////////////////////////////////////
 //CONFIGURATION
 ////////////////////////////////////////////////////////////////////////
-#define VERBOSE 0
+#define VERBOSE 1
 
 ////////////////////////////////////////////////////////////////////////
 //BASIC LIBRARIES
@@ -24,6 +24,8 @@
 #include <SAT_VecMat.h>
 #include <SAT_RefSys.h>
 #include <SAT_Force.h>
+#include <SAT_Time.h>
+#include <SAT_Kepler.h>
 #include <libconfig.h++>
 
 ////////////////////////////////////////////////////////////////////////
@@ -73,12 +75,25 @@ double C[][MAXM+1]={{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}}
 double S[][MAXM+1]={{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
 double J[][MAXM+1]={{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
 double Q[][MAXM+1]={{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0},{0,0,0,0,0}};
-double UL,UM,UT,UV;
+double UL,UM,UT,UV,UA;
 double MEARTH;
 
 ////////////////////////////////////////////////////////////////////////
 //INITIALIZE
 ////////////////////////////////////////////////////////////////////////
+double elapsedTime()
+{
+  static int cbef=0;
+  int cnow;
+  double telaps;
+
+  cnow=clock();
+  telaps=(1.*cnow-cbef)/CLOCKS_PER_SEC;
+  cbef=cnow;
+  
+  return telaps;
+}
+
 //void errorGSL(const char * reason,const char * file,int line,int gsl_errno){throw(1);}
 int initPropagator(void)
 {
@@ -118,6 +133,7 @@ int initPropagator(void)
   //UNITS
   UT=sqrt(UL*UL*UL/(GCONST*UM));
   UV=UL/UT;
+  UA=UL/(UT*UT);
   
   return 0;
 }
@@ -400,8 +416,8 @@ static int Graggs_Method(int (*f)(double,double*,double*,void*),
 			 void *params,
 			 double yres[]) {
   
-  double* pars=(double*)params;
-  int order=(int)pars[0],i;
+  int order=*(double*)params;
+  int i;
   double y1[order],dydt[order],y2[order],yaux[order];
   double h=(t-t0)/(double)NUMBER_OF_STEPS;
   double h2=h+h;
@@ -431,8 +447,7 @@ int Gragg_Bulirsch_Stoer(int (*f)(double,double*,double*,void*),
 			 double epsilon, double yscale,
 			 void *params)
 {
-  double* pars=(double*)params;
-  int order=(int)pars[0];
+  int order=*(double*)params;
   double step_size2[ATTEMPTS];
   double tableau[order][ATTEMPTS+1];
   double dum;
@@ -504,6 +519,7 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
   double t=t_start;
   double h_used=h;
   int p0=(int)*(double*)params;
+  double telaps;
 
   //INITIAL CONDITIONS
   copyVec(x0,X0,nsys);
@@ -515,6 +531,7 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
 
   //INTEGRATE
   NPS=0;
+  telaps=elapsedTime();
   for(int i=0;i<npoints;i++) {
     ts[i]=t;
     
@@ -523,6 +540,9 @@ int integrateEoM(double tini,double X0[],double h,int npoints,double duration,
 	    t,h_used,x0[0],x0[1],x0[2],x0[3],x0[4],x0[5]);
     getchar();
     //*/
+    if((i%10)==0)
+      VPRINT("i=%d: t = %e / %e (exec. time t = %e)\n",i,t,duration,elapsedTime());
+
 
     copyVec(X[i],x0,nsys);
     NPS++;
@@ -1127,3 +1147,63 @@ int EoM_Fulla(double t,double y[],double dydt[],void *params)
 
   return 0;
 }
+
+struct satparams {
+  double nsys;//Size of EoM system
+  double Area;//[m^2] Area of the satellite
+  double mass;//[kg], Mass in kg
+  double CR;//1.3, Drag coefficient
+  double CD;//2.3, Drag coefficient
+  int n;//1-20, Maximum harmonic components
+  int m;//1-20, Maximum tesseral components
+  double qSun;//true|false, Include solar perturbation?
+  double qMoon;//true|false, Include moon perturbation?
+  double qSRad;//true|false, Include Solar radiation effect?
+  double qDrag;//true|false, Include atmospheric drag?
+};
+
+int EoM_Satellite(double t,double y[],double dydt[],void *params) 
+{ 
+  //GET PARAMETERS
+  struct satparams *sat=(struct satparams*)params;
+  double nsys=*(double*)sat;
+  Vector r(3),v(3),a(3);
+  double tt=t*UT+IERS::TT_UTC(t*UT)/86400.0;
+
+  //GET POSITIONS AND VELOCITIES IN SI UNITS
+  r(0)=y[0]*UL;r(1)=y[1]*UL;r(2)=y[2]*UL;
+  v(0)=y[3]*UV;v(1)=y[4]*UV;v(2)=y[5]*UV;
+
+  /*
+  VPRINT("Conditions:\n\tx = %e m, y = %e m, z = %e m\n\tdx/dt = %e m/s, dy/dt = %e m/s, dz/dt = %e m/s\n",
+	 r(0),r(1),r(2),v(0),v(1),v(2));
+  */
+  
+  //EVALUATE IF SATELLITE IS INSIDE EARTH
+  if(/*r<earthRadius(q,f)*/false){
+    fprintf(stderr,"Satellite has collided with the central body\n");
+    throw(1);
+  }
+
+  //CALCULATE VELOCITIES
+  /*dr/dt*/dydt[0]=v(0)/UV;
+  /*df/dt*/dydt[1]=v(1)/UV;
+  /*dq/dt*/dydt[2]=v(2)/UV;
+  
+  //CALCULATE ACCELERATION
+  a=Accel(tt,r,v,
+	  sat->Area,sat->mass,sat->CR,sat->CR,sat->n,sat->m,sat->qSun,sat->qMoon,sat->qSRad,sat->qDrag);
+
+  //ACCELERATIONS
+  /*d(dr/dt)/dt*/dydt[3]=a(0)/UA;
+  /*d(df/dt)/dt*/dydt[4]=a(1)/UA;
+  /*d(dq/dt)/dt*/dydt[5]=a(2)/UA;
+
+  //VERBOSE
+  /*VPRINT("t = %e: dx/dt = %e, dy/dt = %e, dz/dt = %e, dvx/dt = %e, dvy/dt = %e, dvz/dt = %e\n",
+    t,dydt[0],dydt[1],dydt[2],dydt[3],dydt[4],dydt[5]);*/
+  //if(VERBOSE) getchar();
+
+  return 0;
+}
+

@@ -17,15 +17,111 @@ int main(int argc,char* argv[])
   initPropagator();
 
   //VVVV--- PUT HERE THE MODULE YOU WANT TO TEST
+  goto satint;//INTEGRATE WITH ALL THE EFFECTS
   goto sat;//SATELLITE PACKAGE
   
   //THIS LINES WILL NOT BE EXECUTED
-  goto atmos;//ATMOSPHERIC MODEL
   goto elem;//ELEMENTS
+  goto atmos;//ATMOSPHERIC MODEL
   goto integ_2B;//INTEGRATOR TWO-BODY PROBLEM
   goto geopot;//GEOPOTENTIAL
   goto coord;//COORDINATE TRANSFORMATION
   goto integ_mas;//INTEGRATOR MAS
+
+ satint:
+  {
+    //*
+    //All effects
+    struct satparams params={
+      .nsys=6,
+      .Area=5.0,
+      .mass=1000.0,
+      .CR=1.3,
+      .CD=2.3,
+      .n=3,
+      .m=3,
+      .qSun  = true,
+      .qMoon = true,
+      .qSRad = true,
+      .qDrag = true,
+    };
+    //*/
+    /*
+    //Partial effects
+    struct satparams params={
+      .nsys=6,
+      .Area=5.0,
+      .mass=1000.0,
+      .CR=1.3,
+      .CD=2.3,
+      .n=3,
+      .m=3,
+      .qSun  = false,
+      .qMoon = false,
+      .qSRad = false,
+      .qDrag = false,
+    };
+    //*/
+    double c1,c2;
+
+    //INITIAL CONDITIONS
+    double H=350e3;//m
+    double ro=REARTH+H;
+
+    //INITIAL TIME
+    double Mjd0_UTC = Mjd(1999,03,01,00,00,0.0);
+    double Mjd0_TT = Mjd0_UTC + IERS::TT_UTC(Mjd0_UTC)/86400.0;
+    fprintf(stdout,"Mjd0(UTC) = %.9e\n",Mjd0_UTC);
+    fprintf(stdout,"Mjd0(TT) = %.9e\n",Mjd0_TT);
+
+    //INITIAL ORBITAL ELEMENTS
+    double ao=ro/UL;
+    double eo=0.2;
+    double io=30.0*DEG;
+    double Wo=30.0*DEG;
+    double wo=60.0*DEG;
+    double Mo=0.0*DEG;
+    double to=0.0;
+    double mu=1.0;
+    double P=2*M_PI/sqrt(mu/(ao*ao*ao));
+    double h=0.1;
+    double duration=10.0*P;
+    
+    int npoints=(int)(50*duration/P);//50 is the number of points per orbit
+    fprintf(stdout,"Npoints: %d\n",npoints);
+    fprintf(stdout,"P = %e hours\n",P*UT/3600);
+
+    //BUILD ELEMENTS VECTOR
+    double elts[]={ao*(1-eo),eo,io,Wo,wo,Mo,to,mu};
+    fprintf(stdout,"Initial elements: %s\n",vec2strn(elts,8,"%f "));
+    
+    //INITIAL STATE VECTOR IN CARTESIAN COORDINATES
+    double Xc0[6],dXc0dt[]={0,0,0,0,0,0};
+    conics_c(elts,to,Xc0);
+    fprintf(stdout,"Initial conditions (cartesian): %s\n",vec2strn(Xc0,6,"%f "));
+
+    //Integration
+    double tini=0.0;
+    fprintf(stdout,"Duration = %e\n",duration);
+
+    double *ts=newVector(npoints);
+    double *Es=newVector(npoints);
+    double **X=newMatrix(npoints,6);
+    double **Xc=newMatrix(npoints,6);
+
+    //EoM_Satellite(0,Xc0,dXc0dt,&params);
+    //INTEGRATE
+    try{
+      integrateEoM(tini,Xc0,h,npoints,duration,6.0,EoM_Satellite,&params,ts,Xc);
+    }catch(int e){
+      fprintf(stderr,"An exception ocurred: %d (NPS=%d)\n",e,NPS);
+      npoints=NPS;
+    }
+
+    //Save solution
+    savetxt("solution-coordinates.dat",Xc,npoints,6,ts);
+    exit(0);
+  }
 
  sat:
   {
@@ -36,9 +132,22 @@ int main(int argc,char* argv[])
     fprintf(stdout,"%e\n",z(0));
     
     //Calculating the acceleration
-    double CD=2.3;      // Spacecraft parameters
-    double CR=1.3;
-    double Mjd_TT=51269.0;      // State epoch
+    //Compute acceleration
+    double Mjd0_UTC = Mjd(1999,03,01,00,00,0.0);
+    double Mjd0_TT = Mjd0_UTC + IERS::TT_UTC(Mjd0_UTC)/86400.0;
+    fprintf(stdout,"Mjd0(UTC) = %.9e\n",Mjd0_UTC);
+    fprintf(stdout,"Mjd0(TT) = %.9e\n",Mjd0_TT);
+
+    double Area    = 5.0;     // [m^2]  Remote sensing satellite
+    double mass    = 1000.0;  // [kg]
+    double CR      = 1.3;     
+    double CD      = 2.3;
+    int n       = 20;
+    int m       = 20;
+    double qSun     = true;
+    double qMoon    = true;
+    double qSRad    = true;
+    double qDrag    = true;
 
     Vector r(3),v(3);
     double dens;
@@ -48,14 +157,22 @@ int main(int argc,char* argv[])
     fprintf(stdout,"Position = %e\n",r(0));
 
     //Model integrated with sat only compute density above 100 km
-    dens=Density_HP(Mjd_TT,r);
+    dens=Density_HP(Mjd0_TT,r);
     fprintf(stdout,"Density = %e\n",dens);
 
-    //Compute acceleration
-    Mjd0_UTC = Mjd(1999,03,01,00,00,0.0);
-    Mjd0_TT = Mjd0_UTC + IERS::TT_UTC(Mjd0_UTC)/86400.0;
+    Vector Kep(6),Y0(6),a(3);
+    //Kep = Vector ( 7178.0e3, 0.0010, 98.57*Rad, 0.0, 0.0, 0.0 ); 
+    //             a              e    i         W         w         M
+    Kep = Vector ( REARTH+3200e3, 0.2, 30.0*Rad, 30.0*Rad, 60.0*Rad, 0.0*Rad ); 
+    Y0 = State ( GM_Earth, Kep, 0.0 );
+    r = Y0.slice(0,2);
+    v = Y0.slice(3,5);
+    VPRINT("Conditions:\n\tx = %e m, y = %e m, z = %e m\n\tdx/dt = %e m/s, dy/dt = %e m/s, dz/dt = %e m/s\n",
+	   r(0),r(1),r(2),v(0),v(1),v(2));
+    
+    a=Accel(Mjd0_TT,r,v,Area,mass,CR,CR,n,m,qSun,qMoon,qSRad,qDrag);
+    fprintf(stdout,"Acceleration = %.17e, %.17e, %.17e\n",a(0),a(1),a(2));
 
-    //return (0.5*CD*dens*Grav.GM/(Grav.R_ref + h)) - (P_Sol*CR);
     exit(0);
   }
 
